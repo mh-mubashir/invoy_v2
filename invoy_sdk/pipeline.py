@@ -40,6 +40,8 @@ class ActivityTrackingPipeline:
         db_path: str | Path = "./activity_log.db",
         model: str = "llava",  # Use model="moondream" if <5GB RAM
         ollama_host: str = "http://localhost:11434",
+        session_id: Optional[str] = None,
+        prompt_version: Optional[str] = None,
     ):
         """
         Initialize the pipeline.
@@ -50,17 +52,20 @@ class ActivityTrackingPipeline:
             db_path: Path to SQLite activity log.
             model: Ollama model name (default: llava).
             ollama_host: Ollama API host URL.
+            session_id: Optional session identifier for grouping entries in SQLite.
+            prompt_version: Identifier for the prompt configuration used for this run.
         """
         self.interval_seconds = interval_seconds
         self.output_dir = Path(output_dir)
         self.db_path = Path(db_path)
+        self.prompt_version = prompt_version
 
         self.analyzer = MoondreamAnalyzer(
             model=model,
             host=ollama_host,
             fallback_model="moondream",
         )
-        self.activity_log = SQLiteActivityLog(db_path=self.db_path)
+        self.activity_log = SQLiteActivityLog(db_path=self.db_path, session_id=session_id)
         self.capture = ScreenshotCapture(
             interval_seconds=interval_seconds,
             output_dir=output_dir,
@@ -77,22 +82,32 @@ class ActivityTrackingPipeline:
         logger.info("Analyzing new screenshot: %s", screenshot_name)
         try:
             # Activity detection: always run (single image)
-            activity, activity_ms = self.analyzer.analyze(abs_path)
+            activity, activity_extracted_text, activity_ms = self.analyzer.analyze_with_extracted(abs_path)
 
             # Change detection: only when we have a previous screenshot (two images)
             change_summary = None
+            change_prev_extracted_text = None
+            change_cur_extracted_text = None
             change_ms = None
             if self._previous_path is not None:
-                change_summary, change_ms = self.analyzer.analyze_change(
-                    abs_path, self._previous_path
-                )
+                (
+                    change_summary,
+                    change_prev_extracted_text,
+                    change_cur_extracted_text,
+                    change_ms,
+                ) = self.analyzer.analyze_change_with_extracted(abs_path, self._previous_path)
 
             self.activity_log.log(
                 screenshot_path=abs_path,
                 activity=activity,
+                activity_extracted_text=activity_extracted_text,
                 change_summary=change_summary,
+                change_prev_extracted_text=change_prev_extracted_text,
+                change_cur_extracted_text=change_cur_extracted_text,
                 activity_inference_ms=activity_ms,
                 change_inference_ms=change_ms,
+                model_name=self.analyzer.model,
+                prompt_version=self.prompt_version,
             )
             msg = f"[{screenshot_name}] " + ((activity or "")[:80] + ("..." if activity and len(activity) > 80 else ""))
             if change_summary:
@@ -112,6 +127,8 @@ class ActivityTrackingPipeline:
                 change_summary=None,
                 activity_inference_ms=None,
                 change_inference_ms=None,
+                model_name=self.analyzer.model,
+                prompt_version=self.prompt_version,
             )
             self._previous_path = abs_path
 

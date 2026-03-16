@@ -22,9 +22,16 @@ CREATE TABLE IF NOT EXISTS activity_entries (
     unix_time REAL NOT NULL,
     screenshot_path TEXT NOT NULL,
     activity TEXT,
+    activity_extracted_text TEXT,
     change_summary TEXT,
+    change_prev_extracted_text TEXT,
+    change_cur_extracted_text TEXT,
     activity_inference_ms REAL,
     change_inference_ms REAL,
+    model_name TEXT,
+    prompt_version TEXT,
+    activity_quality_score REAL,
+    change_correct INTEGER,
     session_id TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
@@ -63,8 +70,15 @@ class SQLiteActivityLog:
             # Migration: add columns if missing (existing DBs)
             for col, typ in [
                 ("change_summary", "TEXT"),
+                ("activity_extracted_text", "TEXT"),
+                ("change_prev_extracted_text", "TEXT"),
+                ("change_cur_extracted_text", "TEXT"),
                 ("activity_inference_ms", "REAL"),
                 ("change_inference_ms", "REAL"),
+                ("model_name", "TEXT"),
+                ("prompt_version", "TEXT"),
+                ("activity_quality_score", "REAL"),
+                ("change_correct", "INTEGER"),
             ]:
                 try:
                     self._conn.execute(
@@ -78,9 +92,16 @@ class SQLiteActivityLog:
         self,
         screenshot_path: str,
         activity: Optional[str] = None,
+        activity_extracted_text: Optional[str] = None,
         change_summary: Optional[str] = None,
+        change_prev_extracted_text: Optional[str] = None,
+        change_cur_extracted_text: Optional[str] = None,
         activity_inference_ms: Optional[float] = None,
         change_inference_ms: Optional[float] = None,
+        model_name: Optional[str] = None,
+        prompt_version: Optional[str] = None,
+        activity_quality_score: Optional[float] = None,
+        change_correct: Optional[bool] = None,
         timestamp: Optional[datetime] = None,
     ) -> str:
         """
@@ -92,6 +113,10 @@ class SQLiteActivityLog:
             change_summary: MLLM-generated description of what changed from previous screenshot.
             activity_inference_ms: Time in ms for the activity MLLM call (edge inference).
             change_inference_ms: Time in ms for the change detection MLLM call.
+            model_name: Name of the VLM model used for this inference.
+            prompt_version: Identifier for the prompt configuration used.
+            activity_quality_score: Optional human-provided quality rating (e.g. 1–5 scale).
+            change_correct: Optional human label indicating if the change summary is correct.
             timestamp: When the screenshot was taken. Defaults to now.
 
         Returns:
@@ -101,12 +126,17 @@ class SQLiteActivityLog:
         entry_id = str(uuid.uuid4())
 
         conn = self._get_conn()
+        change_correct_int: Optional[int] = None
+        if change_correct is not None:
+            change_correct_int = 1 if change_correct else 0
         conn.execute(
             """
             INSERT INTO activity_entries
-            (id, timestamp, unix_time, screenshot_path, activity, change_summary,
-             activity_inference_ms, change_inference_ms, session_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, timestamp, unix_time, screenshot_path, activity, activity_extracted_text,
+             change_summary, change_prev_extracted_text, change_cur_extracted_text,
+             activity_inference_ms, change_inference_ms, model_name, prompt_version,
+             activity_quality_score, change_correct, session_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry_id,
@@ -114,9 +144,16 @@ class SQLiteActivityLog:
                 ts.timestamp(),
                 str(screenshot_path),
                 activity or "",
+                activity_extracted_text or "",
                 change_summary or "",
+                change_prev_extracted_text or "",
+                change_cur_extracted_text or "",
                 activity_inference_ms,
                 change_inference_ms,
+                model_name,
+                prompt_version,
+                activity_quality_score,
+                change_correct_int,
                 self.session_id,
                 datetime.now().isoformat(),
             ),
@@ -139,14 +176,17 @@ class SQLiteActivityLog:
 
         Returns:
             List of entry dicts with id, timestamp, unix_time, screenshot_path, activity,
-            change_summary, activity_inference_ms, change_inference_ms, session_id.
+            change_summary, activity_inference_ms, change_inference_ms, model_name,
+            prompt_version, activity_quality_score, change_correct, session_id.
         """
         conn = self._get_conn()
         sid = session_id or self.session_id
         cursor = conn.execute(
             """
             SELECT id, timestamp, unix_time, screenshot_path, activity, change_summary,
-                   activity_inference_ms, change_inference_ms, session_id
+                   activity_extracted_text, change_prev_extracted_text, change_cur_extracted_text,
+                   activity_inference_ms, change_inference_ms, model_name, prompt_version,
+                   activity_quality_score, change_correct, session_id
             FROM activity_entries
             WHERE session_id = ?
             ORDER BY unix_time DESC
