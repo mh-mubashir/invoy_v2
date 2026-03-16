@@ -1,0 +1,50 @@
+# Virtual environment
+.venv/
+venv/
+env/
+.env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Build artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+*.manifest
+*.spec
+
+# Local runtime data (created on first run / machine-specific)
+activity_log.db
+*.db
+screenshots/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# pytest / testing
+.pytest_cache/
+.coverage
+htmlcov/

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invoy-sdk"
+version = "0.1.0"
+description = "SDK for periodic screenshot capture and screen activity analysis on Linux"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Invoy" }]
+keywords = ["screenshot", "screen-capture", "linux", "sdk", "activity-monitoring"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "mss>=10.0.0",
+    "ollama>=0.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "black>=23.0",
+]
+
+[project.urls]
+Repository = "https://github.com/invoy/invoy-sdk"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["invoy_sdk*"]
