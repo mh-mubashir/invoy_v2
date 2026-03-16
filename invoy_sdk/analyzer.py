@@ -26,14 +26,29 @@ _BBOX_PATTERN = re.compile(r"^\s*\[\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d
 
 # Minimal prompts for retry when main prompt triggers bbox or prompt-echo
 FALLBACK_ACTIVITY_PROMPT = (
-    "In 2-3 sentences, describe what is clearly visible on the screen and what the person is doing. "
-    "Only state things you can actually see. If text is too small to read, say 'text not readable' "
-    "instead of guessing. Plain text only."
+    "You are analyzing a single desktop screenshot.\n\n"
+    "In 1–3 sentences, describe the SPECIFIC work the person is doing right now.\n\n"
+    "Rules:\n"
+    "- Name the main application and window (for example: \"VS Code editing main.py\", "
+    "\"Chrome on GitHub PR #123\", \"Discord in #general-announcements\", "
+    "\"Microsoft Word showing 'Invoice Q1 2026'\").\n"
+    "- Mention any clearly visible file names, tab names, document titles, URLs, or channel names.\n"
+    "- ONLY mention apps/files/tabs/titles you can actually see in the screenshot. "
+    "If text is too small or blurry, say 'text not readable' instead of guessing.\n"
+    "- Focus on the main active window, not background details.\n"
+    "- Plain text only, no lists, no JSON."
 )
 
 FALLBACK_CHANGE_PROMPT = (
-    "In 1-2 sentences, say whether the person is doing the same task or a different task between the two screenshots, "
-    "based only on visible evidence. If uncertain, say uncertain and what evidence is missing. Plain text only."
+    "You are comparing two desktop screenshots: A (previous) and B (current).\n\n"
+    "In 1–2 sentences, say whether the person is doing the SAME task or a DIFFERENT task, and why.\n\n"
+    "Rules:\n"
+    "- Base your answer on visible evidence: app/window, file/document, tab, or title.\n"
+    "- If the same app and same document/tab are in focus in both, and only minor scrolling/editing changed, "
+    "call it the SAME task.\n"
+    "- If the app OR main document/tab clearly changes, call it a DIFFERENT task and name what changed.\n"
+    "- If the evidence is not readable, say 'uncertain' and explain what is missing.\n"
+    "- Plain text only."
 )
 
 # Two-step prompting: extract readable text first, then describe using only that evidence.
