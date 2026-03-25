@@ -4,10 +4,11 @@ Offline analysis of pre-collected screenshots for Invoy experiments.
 
 Given a directory of screenshots, this script:
   - Sorts them chronologically,
-  - Runs activity and change analysis with a chosen VLM via Ollama,
-  - Logs results into a SQLite database using SQLiteActivityLog.
+  - Runs activity and change analysis with **Qwen2-VL / Qwen2.5-VL** (Hugging Face) via ScreenActivityAnalyzer,
+  - Logs results into SQLite using SQLiteActivityLog.
 
-This lets you separate data collection (screenshot capture) from VLM inference.
+Separate data collection (e.g. collect_screenshots.py) from VLM inference. Install weights:
+  pip install -e ".[vlm-native]"
 """
 
 from __future__ import annotations
@@ -18,13 +19,13 @@ import sys
 from pathlib import Path
 from typing import List
 
-from invoy_sdk.analyzer import MoondreamAnalyzer
 from invoy_sdk.activity_log import SQLiteActivityLog
+from invoy_sdk.analyzer import ScreenActivityAnalyzer
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run offline VLM analysis over a directory of screenshots and log to SQLite."
+        description="Run offline Qwen VL analysis over a directory of screenshots and log to SQLite."
     )
     parser.add_argument(
         "--screenshots-dir",
@@ -41,14 +42,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="moondream:1.8b-v2-q8_0",
-        help="Ollama vision model to use for analysis.",
+        default="Qwen/Qwen2-VL-2B-Instruct",
+        help="Hugging Face Qwen2-VL or Qwen2.5-VL model id.",
     )
     parser.add_argument(
-        "--extractor-model",
+        "--device",
         type=str,
-        default=None,
-        help="Optional Ollama model to use only for OCR-style text extraction (e.g. llava).",
+        default="auto",
+        help="Device: auto, cpu, cuda, mps.",
+    )
+    vlm_speed = parser.add_mutually_exclusive_group()
+    vlm_speed.add_argument(
+        "--fast-vlm",
+        action="store_true",
+        help="Force fast path (single extraction view; shorter outputs). Default on CPU.",
+    )
+    vlm_speed.add_argument(
+        "--full-vlm-views",
+        action="store_true",
+        help="Force multi-view extraction (slower on CPU; better OCR).",
     )
     parser.add_argument(
         "--prompt-version",
@@ -61,12 +73,6 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="offline_analysis",
         help="Session identifier used in SQLite to group this run.",
-    )
-    parser.add_argument(
-        "--ollama-host",
-        type=str,
-        default="http://localhost:11434",
-        help="Ollama host URL.",
     )
     parser.add_argument(
         "--limit",
@@ -103,16 +109,19 @@ def main() -> None:
 
     logger.info("Found %d screenshots in %s", len(screenshots), screenshots_dir)
     logger.info("Model: %s", args.model)
-    if args.extractor_model:
-        logger.info("Extractor model: %s", args.extractor_model)
     logger.info("DB path: %s", args.db_path)
     logger.info("Session tag (session_id): %s", args.session_tag)
 
-    analyzer = MoondreamAnalyzer(
+    fast_vlm_kw: bool | None = None
+    if args.fast_vlm:
+        fast_vlm_kw = True
+    elif args.full_vlm_views:
+        fast_vlm_kw = False
+
+    analyzer = ScreenActivityAnalyzer(
         model=args.model,
-        host=args.ollama_host,
-        fallback_model="moondream",
-        extractor_model=args.extractor_model,
+        device=args.device,
+        fast_vlm=fast_vlm_kw,
     )
     activity_log = SQLiteActivityLog(db_path=args.db_path, session_id=args.session_tag)
 
@@ -130,9 +139,9 @@ def main() -> None:
         if previous_path is not None:
             change_summary, change_prev_extracted_text, change_cur_extracted_text, change_ms = (
                 analyzer.analyze_change_with_extracted(
-                current_path=img_path,
-                previous_path=previous_path,
-            )
+                    current_path=img_path,
+                    previous_path=previous_path,
+                )
             )
 
         activity_log.log(

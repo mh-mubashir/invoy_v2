@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Screenshot-only data collection for Invoy experiments.
+Periodic screenshot data collection for Invoy experiments (capture-only).
 
 This script captures periodic screenshots from a selected monitor and saves
 them to disk without running any VLM or writing to SQLite. Use it to collect
@@ -9,11 +9,11 @@ raw visual data first; you can run offline analysis later.
 Examples:
 
     # Capture from monitor 1 every 10s for ~30 minutes
-    python collect_screenshots.py --monitor 1 --interval 10 --duration-minutes 30 ^
+    python collect_periodic_screenshots.py --monitor 1 --interval 10 --duration-minutes 30 ^
         --output-dir ./screenshots_monitor1_10s
 
     # Capture until you press Ctrl+C (no fixed duration)
-    python collect_screenshots.py --monitor 1 --interval 10 --output-dir ./screenshots_freeform
+    python collect_periodic_screenshots.py --monitor 1 --interval 10 --output-dir ./screenshots_freeform
 """
 
 from __future__ import annotations

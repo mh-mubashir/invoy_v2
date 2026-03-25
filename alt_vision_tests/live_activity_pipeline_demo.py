@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Example: Screenshot capture + MLLM analysis + SQLite activity logging.
+Demo: live screenshot capture + local Qwen VL analysis + SQLite activity logging.
 
 Requires:
-    1. Ollama installed: https://ollama.com/download
-    2. Vision model: ollama pull llava (needs ~5GB RAM)
-       Or: ollama pull moondream (for <5GB RAM, pass model="moondream")
+    pip install -e ".[vlm-native]"
 
 Usage:
-    python example_activity.py
+    python alt_vision_tests/live_activity_pipeline_demo.py
 
 Press Ctrl+C to stop. Activity log saved to ./activity_log.db
 """
@@ -17,24 +15,22 @@ import logging
 import signal
 import time
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-
 from invoy_sdk import ActivityTrackingPipeline
 
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-def main():
-    # Use llava for better quality (needs ~5GB RAM). Use moondream for <5GB RAM.
+
+def main() -> None:
     pipeline = ActivityTrackingPipeline(
         interval_seconds=10,
         output_dir="./screenshots",
         db_path="./activity_log.db",
-        model="moondream:1.8b-v2-q8_0",  # Q8 - best quality, ~2.4GB, fits in ~4GB RAM
     )
     pipeline.start()
 
     print("Activity tracking running (screenshot every 10s -> MLLM -> SQLite)")
-    print(f"Screenshots: ./screenshots/")
-    print(f"Activity log: ./activity_log.db")
+    print("Screenshots: ./screenshots/")
+    print("Activity log: ./activity_log.db")
     print("Press Ctrl+C to stop.")
 
     def on_exit(*_):
@@ -50,3 +46,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

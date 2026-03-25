@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Run full pipeline: analyze existing screenshots and log to SQLite.
-Uses last 3 screenshots to test activity + change detection + DB save.
+ARCHIVED: used MoondreamAnalyzer(backend=\"ollama\"). See README.md in this folder.
+
+Previously: analyze last 3 screenshots in ./screenshots, activity + change + SQLite.
 """
 import logging
 from pathlib import Path
@@ -17,7 +18,11 @@ def main():
         print("No screenshots found in ./screenshots/")
         return
 
-    analyzer = MoondreamAnalyzer(model="moondream:1.8b-v2-q8_0", fallback_model=None)
+    analyzer = MoondreamAnalyzer(
+        model="moondream:1.8b-v2-q8_0",
+        backend="ollama",
+        fallback_model=None,
+    )
     log = SQLiteActivityLog(db_path="./activity_log.db")
 
     print(f"Analyzing {len(imgs)} screenshots and logging to activity_log.db...\n")

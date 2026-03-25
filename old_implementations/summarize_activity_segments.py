@@ -13,7 +13,7 @@ Assumes that the `activity` column contains:
     "client_or_project": "..." | null
   }
 
-This matches the billing-focused prompt used by `MoondreamAnalyzer`.
+This matches the billing-focused prompt used by `ScreenActivityAnalyzer`.
 """
 
 from __future__ import annotations
