@@ -1,5 +1,6 @@
 # Virtual environment
 .venv/
+.venv*/
 venv/
 env/
 .env/
@@ -24,6 +25,7 @@ eggs/
 activity_log.db
 *.db
 screenshots/
+screenshots_*/
 
 # Environment and secrets
 .env
