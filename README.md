@@ -1,6 +1,54 @@
 # Invoy SDK
 
-SDK for periodic screenshot capture on Linux. Designed to support future features like screen activity analysis and work-type judgment.
+SDK for periodic screenshot capture (Linux-first) and **local screen activity analysis** with Hugging Face **Qwen2-VL** and **Qwen2.5-VL**.
+
+## What is actively used right now (current workflow)
+
+We are currently prioritizing **results/quality first** (prompting + model comparison) over “live/real-time” efficiency.
+
+1) **Collect screenshots** (capture-only):
+
+```bash
+python collect_periodic_screenshots.py --monitor 1 --interval 10 --output-dir ./my_shots
+```
+
+2) **Run two models + persist a side-by-side comparison** (this is the main workflow):
+
+```bash
+python simplified_gpu_two_model_compare.py --screenshots-dir ./my_shots
+```
+
+That script writes:
+- Per-model per-frame rows into `simplified_activity_entries` (in each run DB)
+- Side-by-side joins into `model_comparison_results` (in the eval DB)
+
+## Smoke tests / demos
+
+Smoke test (same backend as the SDK):
+
+```bash
+python alt_vision_tests/qwen2_vl_canvas_test.py --image path/to/screenshot.png --model Qwen/Qwen2-VL-2B-Instruct
+```
+
+Runnable demos (kept as references):
+- `alt_vision_tests/screenshot_capture_10s_demo.py`
+- `alt_vision_tests/live_activity_pipeline_demo.py`
+
+## Live pipeline (kept, but not actively used)
+
+`run_experiment.py` runs the **live** `ActivityTrackingPipeline` (capture → Qwen VL → SQLite).
+
+We originally started by focusing on **efficiency** and a live loop. In practice, **inference time dominates** the cadence, so we’re not actively using the live pipeline right now. We’re keeping it around as a reference path for future optimization once the offline “results” are solid.
+
+```bash
+python run_experiment.py --interval 10 --db-path ./activity_qwen.db --session-tag my_run
+```
+
+## Supported vision stack (current)
+
+There is **one supported path**: load models locally via `transformers` (`Qwen2VLBackend` in `invoy_sdk/vlm_backends.py`). The SDK still contains `ScreenActivityAnalyzer` (`invoy_sdk/analyzer.py`) for an extract → describe pipeline, but the current experiments are centered on `simplified_gpu_two_model_compare.py`.
+
+Older and alternative entry points live under `old_implementations/` for reference.
 
 ## Requirements
 
@@ -10,136 +58,27 @@ SDK for periodic screenshot capture on Linux. Designed to support future feature
 
 ## Installation
 
+**Capture only** (no VLM):
+
 ```bash
-cd invoy_v2
 pip install -e .
 ```
 
-Or install dependencies only:
+**Activity analysis** (Qwen VL):
 
 ```bash
-pip install mss
+pip install -e ".[vlm-native]"
 ```
 
-## Quick Start
+First run downloads weights from Hugging Face (default: `Qwen/Qwen2-VL-2B-Instruct`).
 
-### Periodic capture (every 10 seconds)
+## Docs index
 
-```python
-from invoy_sdk import ScreenshotCapture
+- [docs/SCREENSHOT_PLATFORM.md](docs/SCREENSHOT_PLATFORM.md): screenshot stack notes by platform/WM
+- [docs/LOCAL_VLM_QWEN_AND_MOONDREAM.md](docs/LOCAL_VLM_QWEN_AND_MOONDREAM.md): code map (some sections are historical)
+- [docs/ACTIVITY_TRACKING.md](docs/ACTIVITY_TRACKING.md): activity tracking notes (some sections are historical)
+- [docs/EXPERIMENTS_INVoy_VLM.md](docs/EXPERIMENTS_INVoy_VLM.md): experiment notes (historical + progress log)
+- [GITHUB_SETUP.md](GITHUB_SETUP.md): pushing repo to GitHub (update may be needed depending on your setup)
+- [PROJECT_HISTORY.md](PROJECT_HISTORY.md): what we tried, what works now, what we’re doing next
+- [docs/IMPLEMENTATION_HISTORY.md](docs/IMPLEMENTATION_HISTORY.md): dense technical history + how to reproduce older paths
 
-# Capture screenshots every 10 seconds, save to ./screenshots
-capture = ScreenshotCapture(interval_seconds=10, output_dir="./screenshots")
-capture.start()
-
-# Let it run... (e.g. in your application)
-# capture.stop()  # when done
-```
-
-### Single screenshot (blocking)
-
-```python
-from invoy_sdk import ScreenshotCapture
-
-capture = ScreenshotCapture(output_dir="./screenshots")
-path = capture.capture_once()
-print(f"Saved to: {path}")
-```
-
-### Custom callback on each capture
-
-```python
-def on_screenshot(path: str, raw_bytes: bytes):
-    print(f"Captured: {path} ({len(raw_bytes)} bytes)")
-    # Future: pass to activity analysis, upload, etc.
-
-capture = ScreenshotCapture(
-    interval_seconds=10,
-    output_dir="./screenshots",
-    on_capture=on_screenshot,
-)
-capture.start()
-```
-
-## API Reference
-
-### `ScreenshotCapture`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `interval_seconds` | float | 10.0 | Seconds between screenshots |
-| `output_dir` | str/Path | "./screenshots" | Directory to save PNG files |
-| `monitor` | int | 0 | Monitor index (0=all, 1=first, 2=second, ...) |
-| `on_capture` | callable | None | Optional callback(path, raw_bytes) after each capture |
-
-### Methods
-
-- **`start()`** — Start periodic capture in a background thread
-- **`stop()`** — Stop periodic capture
-- **`capture_once()`** — Take a single screenshot (blocking)
-- **`is_running`** — Property: whether capture is active
-
-## Project Structure
-
-```
-invoy_v2/
-├── invoy_sdk/
-│   ├── __init__.py      # Public API
-│   └── capture.py       # Screenshot capture + scheduler
-├── pyproject.toml
-└── README.md
-```
-
-## Activity Tracking (MLLM + SQLite)
-
-Capture screenshots, analyze with a local multimodal LLM (Moondream), and log to SQLite.
-
-### Prerequisites
-
-1. **Ollama** – [Install](https://ollama.com/download)
-2. **Vision model** – `ollama pull llava` (recommended, better quality) or `ollama pull llava-phi3` (lighter, CPU-friendly)
-
-### Usage
-
-```python
-from invoy_sdk import ActivityTrackingPipeline
-
-pipeline = ActivityTrackingPipeline(
-    interval_seconds=10,
-    output_dir="./screenshots",
-    db_path="./activity_log.db",
-)
-pipeline.start()
-# ...
-pipeline.stop()
-
-# Query activity log
-entries = pipeline.get_entries(limit=20)
-```
-
-Run the example: `python example_activity.py`
-
-### SQLite Schema
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | TEXT | UUID |
-| timestamp | TEXT | ISO format |
-| unix_time | REAL | Unix timestamp |
-| screenshot_path | TEXT | Path to PNG |
-| activity | TEXT | MLLM description of current work |
-| change_summary | TEXT | MLLM description of what changed from previous screenshot |
-| activity_inference_ms | REAL | Edge inference time for activity MLLM call (ms) |
-| change_inference_ms | REAL | Edge inference time for change detection MLLM call (ms) |
-| session_id | TEXT | Session UUID |
-
----
-
-## Roadmap
-
-- [x] Periodic screenshot capture (configurable interval)
-- [x] MLLM analysis (Moondream via Ollama)
-- [x] SQLite activity logging
-- [ ] Change detection (skip MLLM when no change)
-- [ ] Configurable storage backends (local, S3, etc.)
-- [ ] Cross-platform support (macOS, Windows)

@@ -1,36 +1,35 @@
-# Activity Tracking – MLLM + SQLite
+# Activity Tracking – Qwen VL + SQLite
 
-Screen activity tracking using a local multimodal LLM (Moondream) and SQLite logging.
+Screen activity tracking using a **local** Qwen2-VL or Qwen2.5-VL model and SQLite logging.
+
+> Note: This doc includes historical approaches. The **current actively used workflow** is described in the repo `README.md` and centers on `simplified_gpu_two_model_compare.py`.
 
 ## Overview
 
 1. **Screenshot** – Captured every N seconds (default 10)
-2. **MLLM** – Moondream analyzes each screenshot locally (CPU)
-3. **Log** – Activity description stored in SQLite with timestamps
+2. **VLM** – Each screenshot (and pairs for change detection) is analyzed locally via Hugging Face `transformers`
+3. **Log** – Activity text, optional extracted text, and change summaries go to SQLite
 
-Change detection is not yet implemented; every screenshot is sent to the MLLM.
+**Change detection**: each frame after the first runs a separate pass comparing the previous and current screenshot.
 
-## Prerequisites
+**Implementation details and versions:** [LOCAL_VLM_QWEN_AND_MOONDREAM.md](LOCAL_VLM_QWEN_AND_MOONDREAM.md) (Qwen-only; filename is legacy).
 
-### Ollama
+## Stack
 
-Install [Ollama](https://ollama.com/download), then pull a vision model:
-
-```bash
-ollama pull llava        # Best quality (~5GB RAM needed)
-ollama pull llava-phi3   # Good quality (~4.6GB RAM needed)
-ollama pull moondream:1.8b-v2-q5_K_M   # Best for ~4GB RAM: better than default moondream
-ollama pull moondream    # Smallest: ~2GB RAM, fastest
-```
-
-**Memory**: With ~4GB available, use `moondream:1.8b-v2-q5_K_M` for better quality than default moondream.
-
-### Python
+Install:
 
 ```bash
-pip install invoy-sdk
-# or: pip install -e .
+pip install -e ".[vlm-native]"
 ```
+
+| Model family | Example HF id | Class (in `vlm_backends`) |
+|--------------|---------------|---------------------------|
+| Qwen2-VL | `Qwen/Qwen2-VL-2B-Instruct` | `Qwen2VLForConditionalGeneration` |
+| Qwen2.5-VL | `Qwen/Qwen2.5-VL-3B-Instruct` | `Qwen2_5_VLForConditionalGeneration` |
+
+Orchestration: **`ScreenActivityAnalyzer`** (`invoy_sdk/analyzer.py`) — extract → describe, retries, CPU **fast** mode (`--fast-vlm`).
+
+A CUDA GPU is recommended; CPU/MPS work but are slower.
 
 ## Usage
 
@@ -41,68 +40,38 @@ pipeline = ActivityTrackingPipeline(
     interval_seconds=10,
     output_dir="./screenshots",
     db_path="./activity_log.db",
+    model="Qwen/Qwen2-VL-2B-Instruct",
+    device="auto",
 )
 pipeline.start()
-
-# ... let it run ...
-
 pipeline.stop()
 entries = pipeline.get_entries(limit=20)
 ```
 
-## SQLite Schema
+### Constructor options (pipeline)
 
-```sql
-CREATE TABLE activity_entries (
-    id TEXT PRIMARY KEY,
-    timestamp TEXT NOT NULL,
-    unix_time REAL NOT NULL,
-    screenshot_path TEXT NOT NULL,
-    activity TEXT,
-    change_summary TEXT,
-    activity_inference_ms REAL,
-    change_inference_ms REAL,
-    session_id TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-```
+- `model`: Hugging Face model id
+- `device`: `"auto"` | `"cpu"` | `"cuda"` | `"mps"`
+- `fast_vlm`: optional bool override for single-view / shorter generations
 
-- **activity**: MLLM description of work being done on the current screen
-- **change_summary**: MLLM description of what changed from the previous screenshot (NULL for first entry)
-- **activity_inference_ms**: Edge inference time for the activity MLLM call (milliseconds)
-- **change_inference_ms**: Edge inference time for the change detection MLLM call (milliseconds, NULL for first entry)
+## SQLite
 
-## MLLM Calls
+See schema in `invoy_sdk/activity_log.py`. Notable columns: `model_name`, `session_id`, `activity`, `change_summary`.
 
-Activity and change detection use **separate MLLM calls** with distinct purposes:
+## MLLM calls
 
-- **Activity**: Single image → detailed description of what work the user is doing (exact nature, topic, context, applications)
-- **Change**: Two images (previous + current) → states whether the work is the SAME or DIFFERENT, with brief explanation
+- **Activity**: multi-view (or single in fast mode) → extract → describe
+- **Change**: extract both sides → decision prompt with both image sets
 
-## Querying the Log
+## Baseline vs strong model
 
-```python
-from invoy_sdk import SQLiteActivityLog
+This workflow is still available, but the scripts live under `old_implementations/`:
 
-log = SQLiteActivityLog(db_path="./activity_log.db")
-entries = log.get_entries(limit=50)
-for e in entries:
-    print(e["timestamp"], e["activity"])
-```
-
-Or with SQLite directly:
-
-```bash
-sqlite3 activity_log.db "SELECT timestamp, activity FROM activity_entries ORDER BY unix_time DESC LIMIT 10"
-```
+1. Run `old_implementations/offline_analyze_screenshots.py` with a small model → `activity_entries`
+2. Run `old_implementations/teacher_analyze_screenshots.py` with a larger Qwen VL → `teacher_activity_entries`
+3. Run `old_implementations/evaluate_teacher_student.py` with `--session-id` and `--teacher-model` as needed
 
 ## Hardware
 
-- **CPU only** – Moondream (~1.6B params) runs on CPU via Ollama
-- Expect ~5–30 seconds per screenshot depending on CPU
-- Interval is minimum; actual cadence = interval + analysis time
-
-## Model
-
-- **moondream** – Small vision-language model, CPU-friendly
-- Alternative: `ollama pull llava` (larger, slower, more accurate)
+- **Qwen2-VL / 2.5-VL**: GPU recommended for throughput; use `--fast-vlm` on CPU
+- Interval is a minimum; actual cadence ≈ interval + inference time

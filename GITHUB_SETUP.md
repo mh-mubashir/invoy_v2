@@ -43,8 +43,7 @@ pip install -e .
 Then run the activity example:
 
 ```bash
-ollama pull llava   # one-time: get the vision model
-python example_activity.py
+python alt_vision_tests/live_activity_pipeline_demo.py
 ```
 
 The `activity_log.db` and `screenshots/` folder will be created automatically on first run.

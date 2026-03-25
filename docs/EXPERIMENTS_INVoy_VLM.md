@@ -1,5 +1,7 @@
 ## Invoy VLM Experiments – Local Screen Activity Tracking
 
+> Note: This document contains a historical experiment write-up (originally Ollama-based) plus a progress log. The **current actively used** workflow is the two-model GPU compare in `simplified_gpu_two_model_compare.py` (see repo `README.md`).
+
 ### 1. Motivation & Goal
 
 We want to evaluate how well local vision-language models (VLMs) running via Ollama can:
@@ -50,7 +52,7 @@ The goal is to produce quantitative metrics, visualizations, and a reproducible 
 
 ### 4. Running Experiments
 
-- Use `run_experiment.py` to control experiments from the CLI:
+- Use `run_experiment.py` to control live pipeline experiments from the CLI (kept for reference; not actively used right now):
   - **Arguments**:
     - `--model`: Ollama model name (e.g. `moondream:1.8b-v2-q8_0`).
     - `--interval`: seconds between screenshots.
@@ -75,7 +77,7 @@ This section will summarize:
 - **Example cases**:
   - Screenshot thumbnails with model descriptions and commentary (good vs bad behavior).
 
-Tables and plots will be produced from the analysis notebook/script (`experiments_analysis.ipynb`).
+Tables and plots can be produced from the analysis notebook (`old_implementations/experiments_analysis.ipynb`) or custom scripts.
 
 ### 6. Discussion
 
@@ -96,12 +98,12 @@ Tables and plots will be produced from the analysis notebook/script (`experiment
 ### 2026-03-16 — Prompt iterations and grounding
 
 - **What we implemented**
-  - Added `offline_analyze_screenshots.py` to run analysis over an existing screenshot directory and write results to SQLite.
+  - Added `offline_analyze_screenshots.py` to run analysis over an existing screenshot directory and write results to SQLite. (Now archived at `old_implementations/offline_analyze_screenshots.py`.)
   - Extended prompts in `invoy_sdk/analyzer.py` multiple times to improve output quality and reduce “generic” labels.
   - Added helper scripts:
-    - `summarize_activity_segments.py`: turns per-frame labels into contiguous activity segments.
-    - `inspect_activity_db.py`: prints sample rows from `activity_offline.db` to quickly spot bad generations.
-    - `teacher_analyze_screenshots.py` + `evaluate_teacher_student.py`: teacher/student evaluation scaffold.
+    - `summarize_activity_segments.py`: turns per-frame labels into contiguous activity segments. (Archived at `old_implementations/summarize_activity_segments.py`.)
+    - `inspect_activity_db.py`: prints sample rows from `activity_offline.db` to quickly spot bad generations. (Archived at `old_implementations/inspect_activity_db.py`.)
+    - `teacher_analyze_screenshots.py` + `evaluate_teacher_student.py`: teacher/student evaluation scaffold. (Archived at `old_implementations/teacher_analyze_screenshots.py` and `old_implementations/evaluate_teacher_student.py`.)
 
 - **Issues we observed**
   - **Prompt parroting / template echo**: Moondream would repeat phrasing from the prompt (and sometimes even our example strings), producing text like “Chrome showing a GitHub PR / Outlook composing an email” regardless of what was on screen.
@@ -129,7 +131,7 @@ Tables and plots will be produced from the analysis notebook/script (`experiment
     - `change_prev_extracted_text`
     - `change_cur_extracted_text`
   - Updated both offline and realtime pipelines to store these fields.
-  - Updated `inspect_activity_db.py` to print extracted text next to the activity/change outputs.
+  - Updated `inspect_activity_db.py` to print extracted text next to the activity/change outputs. (Now archived at `old_implementations/inspect_activity_db.py`.)
 
 - **Why this matters**
   - We can now answer: “Is Moondream failing OCR (returning `NO_READABLE_TEXT`), or is the describe step ignoring good evidence?”
