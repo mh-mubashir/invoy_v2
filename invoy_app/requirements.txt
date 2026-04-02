@@ -14,3 +14,7 @@ win10toast-persist>=0.1.0
 
 # Image processing — used for logo rendering and screenshot manipulation
 Pillow>=10.0.0
+
+# UI automation — used by .claude/agents/app_launcher.py for the Testing Agent
+# Enables keyboard shortcuts and mouse clicks to drive the app during live tests
+pyautogui>=0.9.54

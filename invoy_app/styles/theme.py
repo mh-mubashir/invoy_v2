@@ -1,51 +1,86 @@
 """
 Invoy App — design tokens.
 
-Apple-inspired dark palette that maps well to customtkinter's colour API.
-All components import from here — never hardcode hex values in widgets.
+Palette inspired by Apple's dark mode: near-black backgrounds, very
+subtle borders, muted accent colours used only where they carry meaning.
 """
 
+# ── Colours ────────────────────────────────────────────────────────────────
+
 COLORS: dict[str, str] = {
-    "bg":      "#0F0F0F",   # root window background
-    "surface": "#1C1C1E",   # card / panel background
-    "raised":  "#2C2C2E",   # slightly elevated surface (alt rows, badges)
-    "accent":  "#0A84FF",   # Apple blue — buttons, status dot, accent borders
-    "accent_hover": "#0070E0",
-    "danger":  "#FF453A",   # red — stop button, error states
-    "success": "#30D158",   # green — recording indicator
-    "text":    "#FFFFFF",
-    "subtext": "#8E8E93",   # secondary labels, timestamps
-    "border":  "#38383A",
-    "separator": "#2C2C2E",
+    # Backgrounds
+    "bg":       "#09090B",   # root window — near-black
+    "surface":  "#131316",   # card / panel backgrounds
+    "elevated": "#1C1C1F",   # hover rows, selected states, raised chips
+
+    # Borders & separators
+    "border":   "#27272A",   # hairlines — almost invisible against surface
+
+    # Text hierarchy
+    "text":     "#FAFAFA",   # primary — titles, activity text
+    "subtext":  "#A1A1AA",   # secondary — labels, category headers
+    "muted":    "#52525B",   # tertiary — timestamps, inactive elements
+
+    # Interactive
+    "accent":          "#3B82F6",   # blue — buttons, links; used sparingly
+    "accent_hover":    "#2563EB",
+
+    # Status
+    "recording":  "#F87171",   # muted red — pulse dot during recording
+    "loading":    "#FBBF24",   # amber — model loading
+    "success":    "#4ADE80",   # muted green — session complete
+    "danger":     "#F87171",   # same muted red for errors
+
+    # Application context chips (muted, 60% saturation)
+    "ctx_code":    "#A78BFA",   # VS Code / editors      — muted violet
+    "ctx_browser": "#60A5FA",   # Chrome / Firefox        — muted blue
+    "ctx_term":    "#34D399",   # Terminal / shell        — muted emerald
+    "ctx_other":   "#9CA3AF",   # fallback                — neutral grey
 }
 
-# Font families — Segoe UI is always present on Windows; falls back gracefully.
+# ── Typography ─────────────────────────────────────────────────────────────
+# Segoe UI is always present on Windows 10/11 and gives a clean sans result.
+# These are (family, size, weight?) tuples for customtkinter font= parameter.
+
 FONTS: dict[str, tuple] = {
-    "heading": ("Segoe UI", 18, "bold"),
-    "subheading": ("Segoe UI", 14, "bold"),
-    "body":    ("Segoe UI", 13),
-    "body_bold": ("Segoe UI", 13, "bold"),
-    "mono":    ("Consolas", 12),
-    "small":   ("Segoe UI", 11),
-    "tiny":    ("Segoe UI", 9),
+    "wordmark":  ("Segoe UI", 16, "bold"),       # "Invoy" in header
+    "display":   ("Segoe UI", 32, "bold"),        # idle state large title
+    "heading":   ("Segoe UI", 17, "bold"),        # section headings
+    "body":      ("Segoe UI", 15),                # activity card text (hero)
+    "body_bold": ("Segoe UI", 15, "bold"),
+    "ui":        ("Segoe UI", 13),                # UI labels, bullets
+    "ui_bold":   ("Segoe UI", 13, "bold"),        # category titles
+    "status":    ("Segoe UI", 12),                # header status string
+    "small":     ("Segoe UI", 11),                # secondary labels
+    "timestamp": ("Segoe UI", 11),                # timestamps, muted
+    "mono":      ("Consolas", 13),                # timer, technical values
 }
+
+# ── Spacing (8-px grid) ────────────────────────────────────────────────────
 
 SPACING: dict[str, int] = {
-    "xs": 4,
-    "sm": 8,
-    "md": 16,
-    "lg": 24,
-    "xl": 32,
+    "xs":  4,
+    "sm":  8,
+    "md":  16,
+    "lg":  24,
+    "xl":  40,
+    "xxl": 64,
 }
 
-RADIUS = 12          # default corner_radius for all CTk widgets
-RADIUS_SM = 8        # smaller radius for inner cards
-RADIUS_BTN = 24      # pill-shaped main action button
+# ── Geometry ───────────────────────────────────────────────────────────────
 
-# Window dimensions
-WINDOW_W = 960
-WINDOW_H = 700
-WINDOW_MIN_W = 820
-WINDOW_MIN_H = 580
+RADIUS    = 10    # default card / button corner radius
+RADIUS_SM = 6     # small elements: chips, tags
+RADIUS_XS = 4     # tiny elements
 
-LEFT_PANEL_W = 290   # fixed left column width
+HEADER_H  = 52    # header bar height in pixels
+CARD_PAD_X = 20   # horizontal padding inside activity cards
+CARD_PAD_Y = 16   # vertical padding inside activity cards
+CARD_GAP   = 6    # gap between consecutive cards
+
+# ── Window ─────────────────────────────────────────────────────────────────
+
+WINDOW_W     = 1100
+WINDOW_H     = 720
+WINDOW_MIN_W = 900
+WINDOW_MIN_H = 600

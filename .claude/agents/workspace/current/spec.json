@@ -1,0 +1,58 @@
+{
+  "request_summary": "Redesign ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL in recorder.py to maximise format compliance and output specificity for Qwen2-VL 2B",
+  "files_to_change": [
+    "invoy_app/core/recorder.py"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "description": "ACTIVITY_PROMPT word count is ≤100 words — shorter than current ~138",
+      "testable": true
+    },
+    {
+      "id": "AC-2",
+      "description": "ACTIVITY_PROMPT places the format line and a worked example FIRST — before any field rules",
+      "testable": true
+    },
+    {
+      "id": "AC-3",
+      "description": "ACTIVITY_PROMPT explicitly instructs the model to read visible text on screen (title bar, tab title, URL bar) as primary source",
+      "testable": true
+    },
+    {
+      "id": "AC-4",
+      "description": "ACTIVITY_PROMPT contains exactly 3 worked examples: code editor, browser, terminal",
+      "testable": true
+    },
+    {
+      "id": "AC-5",
+      "description": "CHANGE_PROMPT_TMPL explicitly compares App and File/URL fields between {prev} and {curr} by naming those fields",
+      "testable": true
+    },
+    {
+      "id": "AC-6",
+      "description": "CHANGE_PROMPT_TMPL lowers the threshold — fires when file, URL, or focused section changes, not only on full app/task switch",
+      "testable": true
+    },
+    {
+      "id": "AC-7",
+      "description": "Both constants are plain string literals; CHANGE_PROMPT_TMPL retains {prev} and {curr} .format() placeholders",
+      "testable": true
+    }
+  ],
+  "design_constraints": [
+    "No UI changes — backend prompt constants only",
+    "Do not change the · separator character or three-field structure — activity_feed.py splits on ' · '",
+    "Max 3 rules in activity prompt — small models lose format compliance above this"
+  ],
+  "out_of_scope": [
+    "Changing max_new_tokens values",
+    "Modifying _on_capture inference logic",
+    "Changing activity_feed.py or any other file"
+  ],
+  "risk_flags": [
+    "Qwen2-VL 2B loses format compliance when given >3 rules — keep it minimal",
+    "The · character is U+00B7 MIDDLE DOT — must not be replaced with hyphen, pipe or ASCII dot",
+    "CHANGE_PROMPT_TMPL is text-only — cannot reference visual content"
+  ]
+}

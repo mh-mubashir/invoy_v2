@@ -37,6 +37,10 @@ class AppConfig:
     # HuggingFace model ID — hardcoded to 2B for the app
     model_id: str = "Qwen/Qwen2-VL-2B-Instruct"
 
+    # Inference device: "auto" | "cuda" | "cpu"
+    # "auto" picks CUDA if available, falls back to CPU.
+    device: str = "auto"
+
     # customtkinter appearance mode: "dark" | "light" | "System"
     appearance_mode: str = "dark"
 

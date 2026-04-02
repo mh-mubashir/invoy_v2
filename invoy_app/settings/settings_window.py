@@ -30,14 +30,16 @@ class SettingsWindow(ctk.CTkToplevel):
         master: ctk.CTk,
         config: AppConfig,
         on_save: Callable[[AppConfig], None],
+        recording_active: bool = False,
     ) -> None:
         super().__init__(master)
         self._config = config
         self._on_save = on_save
         self._show_key = False
+        self._recording_active = recording_active
 
         self.title("Invoy — Settings")
-        self.geometry("500x540")
+        self.geometry("500x700")
         self.resizable(False, False)
         self.configure(fg_color=COLORS["surface"])
         self.grab_set()   # make modal
@@ -67,14 +69,14 @@ class SettingsWindow(ctk.CTkToplevel):
         self._key_var = tk.StringVar(value=self._config.claude_api_key)
         self._key_entry = ctk.CTkEntry(
             key_row, textvariable=self._key_var, show="*",
-            fg_color=COLORS["raised"], border_color=COLORS["border"],
+            fg_color=COLORS["elevated"], border_color=COLORS["border"],
             text_color=COLORS["text"], font=FONTS["mono"],
             corner_radius=RADIUS,
         )
         self._key_entry.grid(row=0, column=0, sticky="ew", padx=(0, SPACING["sm"]))
         self._eye_btn = ctk.CTkButton(
             key_row, text="Show", width=60,
-            fg_color=COLORS["raised"], hover_color=COLORS["border"],
+            fg_color=COLORS["elevated"], hover_color=COLORS["border"],
             text_color=COLORS["subtext"], font=FONTS["small"],
             corner_radius=RADIUS, command=self._toggle_key_visibility,
         )
@@ -95,7 +97,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._interval_var = tk.StringVar(value=str(self._config.interval_seconds))
         ctk.CTkEntry(
             self, textvariable=self._interval_var, width=80,
-            fg_color=COLORS["raised"], border_color=COLORS["border"],
+            fg_color=COLORS["elevated"], border_color=COLORS["border"],
             text_color=COLORS["text"], font=FONTS["body"],
             corner_radius=RADIUS,
         ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
@@ -107,15 +109,58 @@ class SettingsWindow(ctk.CTkToplevel):
             self,
             values=["Dark", "Light", "System"],
             variable=self._appearance_var,
-            fg_color=COLORS["raised"],
+            fg_color=COLORS["elevated"],
             selected_color=COLORS["accent"],
             selected_hover_color=COLORS["accent_hover"],
-            unselected_color=COLORS["raised"],
+            unselected_color=COLORS["elevated"],
             unselected_hover_color=COLORS["border"],
             text_color=COLORS["text"],
             font=FONTS["body"],
             corner_radius=RADIUS,
         ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
+
+        # ---- Inference device --------------------------------------
+        self._section("Inference Device")
+
+        # Map display labels ↔ config values
+        _DEVICE_LABELS  = ["Auto", "GPU (CUDA)", "CPU"]
+        _DEVICE_VALUES  = ["auto", "cuda", "cpu"]
+        current_label   = _DEVICE_LABELS[
+            _DEVICE_VALUES.index(self._config.device)
+            if self._config.device in _DEVICE_VALUES else 0
+        ]
+        self._device_var = tk.StringVar(value=current_label)
+
+        self._device_btn = ctk.CTkSegmentedButton(
+            self,
+            values=_DEVICE_LABELS,
+            variable=self._device_var,
+            fg_color=COLORS["elevated"],
+            selected_color=COLORS["accent"],
+            selected_hover_color=COLORS["accent_hover"],
+            unselected_color=COLORS["elevated"],
+            unselected_hover_color=COLORS["border"],
+            text_color=COLORS["text"],
+            font=FONTS["body"],
+            corner_radius=RADIUS,
+        )
+        self._device_btn.pack(anchor="w", padx=pad, pady=(0, 2))
+
+        if self._recording_active:
+            self._device_btn.configure(state="disabled")
+            ctk.CTkLabel(
+                self,
+                text="Stop the current session to change the inference device.",
+                font=FONTS["small"],
+                text_color=COLORS["muted"],
+            ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
+        else:
+            ctk.CTkLabel(
+                self,
+                text="Auto detects CUDA; fall back to CPU if no GPU is available.",
+                font=FONTS["small"],
+                text_color=COLORS["muted"],
+            ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
 
         # ---- Notifications -----------------------------------------
         self._section("Windows Notifications")
@@ -150,13 +195,13 @@ class SettingsWindow(ctk.CTkToplevel):
         row.columnconfigure(0, weight=1)
         ctk.CTkEntry(
             row, textvariable=var,
-            fg_color=COLORS["raised"], border_color=COLORS["border"],
+            fg_color=COLORS["elevated"], border_color=COLORS["border"],
             text_color=COLORS["text"], font=FONTS["small"],
             corner_radius=RADIUS,
         ).grid(row=0, column=0, sticky="ew", padx=(0, SPACING["sm"]))
         ctk.CTkButton(
             row, text="Browse", width=70,
-            fg_color=COLORS["raised"], hover_color=COLORS["border"],
+            fg_color=COLORS["elevated"], hover_color=COLORS["border"],
             text_color=COLORS["subtext"], font=FONTS["small"],
             corner_radius=RADIUS, command=browse_cmd,
         ).grid(row=0, column=1)
@@ -190,12 +235,21 @@ class SettingsWindow(ctk.CTkToplevel):
         except ValueError:
             interval = self._config.interval_seconds
 
+        _DEVICE_LABELS = ["Auto", "GPU (CUDA)", "CPU"]
+        _DEVICE_VALUES = ["auto", "cuda", "cpu"]
+        chosen_label   = self._device_var.get()
+        device         = _DEVICE_VALUES[
+            _DEVICE_LABELS.index(chosen_label)
+            if chosen_label in _DEVICE_LABELS else 0
+        ]
+
         new_cfg = AppConfig(
             claude_api_key=self._key_var.get().strip(),
             db_path=self._db_var.get().strip(),
             screenshot_dir=self._ss_var.get().strip(),
             interval_seconds=max(5.0, interval),
             model_id=self._config.model_id,
+            device=device,
             appearance_mode=self._appearance_var.get().lower(),
             notifications_enabled=self._notif_var.get(),
         )

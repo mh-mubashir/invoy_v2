@@ -7,11 +7,9 @@ to the Ollama/MoondreamAnalyzer path).
 
 Threading model
 ───────────────
-• ScreenshotCapture runs its own daemon thread (ThreadLoop inside capture.py).
-• _on_capture() is called from that thread.
-• All Qwen inference happens on the capture thread (GPU calls are blocking;
-  that's correct — no parallel inference).
-• SQLiteActivityLog.log() uses check_same_thread=False so it is safe to call
+• ScreenshotCapture runs its own daemon thread.
+• _on_capture() is called from that thread — all inference runs there too.
+• SQLiteActivityLog uses check_same_thread=False so it is safe to write
   from the capture thread.
 • UI callbacks are scheduled with root.after(0, fn) so they execute on the
   Tk main thread — the only thread allowed to touch widgets.
@@ -19,10 +17,15 @@ Threading model
 
 from __future__ import annotations
 
+import sqlite3
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Optional
+
+from PIL import Image
 
 # SDK primitives
 try:
@@ -36,21 +39,61 @@ except ImportError:
 from invoy_app.settings.config import AppConfig
 
 
+# ── Constants ──────────────────────────────────────────────────────────────
+
+# Qwen2-VL uses dynamic tiling: a 1920×1080 screenshot can produce 2000+
+# vision tokens and makes inference take 20–30 s on a mid-range GPU.
+# Resizing to MAX_INFERENCE_WIDTH keeps vision tokens under ~500 and cuts
+# inference to 3–8 s without meaningfully harming text legibility.
+MAX_INFERENCE_WIDTH = 1280   # pixels; height scaled proportionally
+
+
+def _resize_for_inference(src_path: str) -> str:
+    """
+    Return a path to a resized copy of the screenshot if it is wider than
+    MAX_INFERENCE_WIDTH, otherwise return the original path unchanged.
+
+    The resized file is written next to the original with a '_thumb' suffix.
+    """
+    img = Image.open(src_path)
+    w, h = img.size
+    if w <= MAX_INFERENCE_WIDTH:
+        return src_path
+    new_h = int(h * MAX_INFERENCE_WIDTH / w)
+    img_small = img.resize((MAX_INFERENCE_WIDTH, new_h), Image.LANCZOS)
+    thumb_path = str(src_path).replace(".png", "_thumb.png")
+    img_small.save(thumb_path)
+    print(f"[Invoy] Resized {w}×{h} → {MAX_INFERENCE_WIDTH}×{new_h} for inference")
+    return thumb_path
+
+
 # ── Prompts ────────────────────────────────────────────────────────────────
 
 ACTIVITY_PROMPT = (
-    "You are a desktop activity monitor. "
-    "Describe what the person is currently doing on this screen in 1-3 sentences. "
-    "Name the specific application, file name, or webpage URL if visible. "
-    "Be concrete and factual. Plain text only — no markdown."
+    "Look at this screenshot. Reply in this exact format:\n"
+    "[App] · [File or URL] · [specific action with enough detail to be useful]\n\n"
+    "Field rules:\n"
+    "- App: foreground application (e.g. VS Code, Chrome, Excel, Terminal)\n"
+    "- File or URL: full URL if a browser tab is active; file name if an editor is open; "
+    "document title for Office/PDF; current directory or command for a terminal; "
+    "window title otherwise\n"
+    "- Action: name the specific thing being worked on — mention function names, "
+    "topics, PR titles, error messages, or commands where visible. "
+    "Aim for 8-15 words.\n\n"
+    "e.g. VS Code · recorder.py · writing the _on_capture callback that triggers VLM inference\n"
+    "e.g. Chrome · github.com/org/repo/pull/47 · reviewing diff in the streaming response module\n"
+    "e.g. Terminal · ~/projects/invoy · running pytest on the activity log test suite\n"
+    "One line. No extra text."
 )
 
 CHANGE_PROMPT_TMPL = (
-    "Previous activity: {prev}\n"
-    "Current activity: {curr}\n\n"
-    "What changed between these two activities? "
-    "Answer in one sentence. "
-    "If nothing significant changed, say exactly: No significant change."
+    "Before: {prev}\n"
+    "After: {curr}\n\n"
+    "Describe what changed or progressed between these two moments. "
+    "Cover: did the app, file, or URL change? Did the task or focus shift? "
+    "What specific progress was made?\n"
+    "Write one concise sentence. "
+    "Only if nothing at all changed, reply exactly: No significant change."
 )
 
 
@@ -63,15 +106,11 @@ class InvoyRecorder:
     Parameters
     ----------
     config : AppConfig
-        Runtime configuration (db path, screenshot dir, model ID, interval).
     root : tk widget
-        Tkinter root used for thread-safe ``root.after(0, fn)`` callbacks.
+        Tkinter root — used for thread-safe root.after(0, fn) callbacks.
     on_activity : (activity_text, change_text, timestamp_iso) -> None
-        Called on the Tk thread whenever a new frame is processed.
-    on_error : (message) -> None
-        Called on the Tk thread on inference or IO errors.
+    on_error : (message) -> None   — called for fatal errors only
     on_model_loaded : () -> None
-        Called on the Tk thread once the VLM is ready (heavy load done).
     """
 
     def __init__(
@@ -82,19 +121,20 @@ class InvoyRecorder:
         on_error: Callable[[str], None],
         on_model_loaded: Optional[Callable[[], None]] = None,
     ) -> None:
-        self._config       = config
-        self._root         = root
-        self._on_activity  = on_activity
-        self._on_error     = on_error
+        self._config          = config
+        self._root            = root
+        self._on_activity     = on_activity
+        self._on_error        = on_error
         self._on_model_loaded = on_model_loaded or (lambda: None)
 
-        self._capture:  Optional[ScreenshotCapture]   = None
-        self._backend:  Optional[Qwen2VLBackend]      = None
-        self._log:      Optional[SQLiteActivityLog]   = None
-        self._session_id: Optional[str] = None
-        self._prev_activity: Optional[str] = None
+        self._capture:    Optional[ScreenshotCapture] = None
+        self._backend:    Optional[Qwen2VLBackend]    = None
+        self._log:        Optional[SQLiteActivityLog] = None
+        self._session_id: Optional[str]               = None
+        self._prev_activity: Optional[str]            = None
         self._lock = threading.Lock()
         self._running = False
+        self._last_capture_time: float = 0.0
 
     # ── Public API ─────────────────────────────────────────────────────
 
@@ -107,51 +147,70 @@ class InvoyRecorder:
             return
 
         self._config.ensure_dirs()
-        self._session_id  = str(uuid.uuid4())[:8]
+        self._session_id    = str(uuid.uuid4())[:8]
         self._prev_activity = None
-        self._running     = True
+        self._running       = True
 
-        # Open DB (fast)
-        self._log = SQLiteActivityLog(db_path=self._config.db_path)
+        # BUG FIX: pass session_id to the constructor — log() does NOT accept it
+        self._log = SQLiteActivityLog(
+            db_path=self._config.db_path,
+            session_id=self._session_id,
+        )
 
-        # Load model in a background thread so the UI stays responsive
         threading.Thread(target=self._load_model_then_capture, daemon=True).start()
 
     def stop(self) -> None:
-        """Stop recording and flush the database."""
+        """Stop recording and close the database."""
         self._running = False
         if self._capture and self._capture.is_running:
             self._capture.stop()
         if self._log:
             try:
-                self._log.__exit__(None, None, None)
+                self._log.close()
             except Exception:
                 pass
         self._capture = None
 
     def get_session_entries(self, limit: int = 200) -> list[dict]:
-        """Return recent log rows for the current session."""
-        if not self._log or not self._session_id:
+        """Return recent entries for the current session."""
+        if not self._log:
             return []
         try:
+            # Pass session_id explicitly so it always queries the right session
             return self._log.get_entries(session_id=self._session_id, limit=limit)
         except Exception:
             return []
 
     def get_all_entries(self, limit: int = 100) -> list[dict]:
-        """Return recent rows across all sessions (for the DB viewer)."""
-        if not self._log:
-            # open a read-only connection temporarily
-            try:
-                tmp = SQLiteActivityLog(db_path=self._config.db_path)
-                rows = tmp.get_entries(limit=limit)
-                tmp.__exit__(None, None, None)
-                return rows
-            except Exception:
-                return []
+        """
+        Return the most recent entries across ALL sessions (for the DB viewer).
+
+        get_entries() always filters by session_id, so we do a direct SQL query
+        here to show the full history without a session filter.
+        """
+        db_path = Path(self._config.db_path)
+        if not db_path.exists():
+            return []
         try:
-            return self._log.get_entries(limit=limit)
-        except Exception:
+            conn = sqlite3.connect(str(db_path), check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                """
+                SELECT id, timestamp, unix_time, screenshot_path,
+                       activity, change_summary,
+                       activity_inference_ms, change_inference_ms,
+                       model_name, session_id
+                FROM activity_entries
+                ORDER BY unix_time DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+            conn.close()
+            return rows
+        except Exception as exc:
+            print(f"[Invoy] get_all_entries error: {exc}")
             return []
 
     @property
@@ -162,19 +221,30 @@ class InvoyRecorder:
     def session_id(self) -> Optional[str]:
         return self._session_id
 
+    @property
+    def seconds_until_next_capture(self) -> int:
+        """Approximate seconds until the next screenshot, for UI countdown."""
+        elapsed = time.monotonic() - self._last_capture_time
+        return max(0, int(self._config.interval_seconds - elapsed))
+
     # ── Internal ───────────────────────────────────────────────────────
 
     def _load_model_then_capture(self) -> None:
-        """Heavy model load → then kick off ScreenshotCapture. Runs in thread."""
+        """Load the VLM (blocking), then start ScreenshotCapture. Runs in thread."""
+        print("[Invoy] Loading Qwen2-VL 2B model…")
         try:
-            self._backend = Qwen2VLBackend(model_id=self._config.model_id)
-            # Force the model to load now (lazy load on first generate())
+            self._backend = Qwen2VLBackend(
+                model_id=self._config.model_id,
+                device=self._config.device,
+            )
             self._backend._ensure_loaded()
         except Exception as exc:
+            print(f"[Invoy] Model load FAILED: {exc}")
             self._ui_error(f"Model load failed: {exc}")
             self._running = False
             return
 
+        print("[Invoy] Model ready. Starting screenshot capture.")
         self._root.after(0, self._on_model_loaded)
 
         self._capture = ScreenshotCapture(
@@ -189,23 +259,31 @@ class InvoyRecorder:
         if not self._running:
             return
 
+        self._last_capture_time = time.monotonic()
         ts = datetime.now(timezone.utc).isoformat()
+        print(f"[Invoy] Frame captured: {path}")
+
+        # Resize screenshot so vision token count stays manageable
+        infer_path = _resize_for_inference(path)
 
         # ── Activity inference ─────────────────────────────────────────
         try:
+            print("[Invoy] Running activity inference…")
             activity_text, act_ms = self._backend.generate(
                 prompt=ACTIVITY_PROMPT,
-                image_paths=[path],
-                max_new_tokens=200,
+                image_paths=[infer_path],
+                max_new_tokens=150,
             )
-            if not activity_text:
-                activity_text = "(no description)"
+            activity_text = activity_text or "(no description)"
+            print(f"[Invoy] Activity ({act_ms:.0f} ms): {activity_text[:80]}")
         except Exception as exc:
+            print(f"[Invoy] Activity inference FAILED: {exc}")
             self._ui_error(f"Activity inference error: {exc}")
             return
 
-        # ── Change inference (text-only, uses prev activity) ───────────
+        # ── Change inference (text-only — image_paths must be [], not None) ──
         change_text = ""
+        chg_ms: float = 0.0
         with self._lock:
             prev = self._prev_activity
             self._prev_activity = activity_text
@@ -213,28 +291,34 @@ class InvoyRecorder:
         if prev:
             prompt = CHANGE_PROMPT_TMPL.format(prev=prev, curr=activity_text)
             try:
-                change_text, _ = self._backend.generate(
+                change_text, chg_ms = self._backend.generate(
                     prompt=prompt,
-                    image_paths=None,    # text-only
+                    image_paths=[],   # BUG FIX: empty list, not None
                     max_new_tokens=80,
                 )
-                if not change_text:
-                    change_text = ""
-            except Exception:
+                change_text = change_text or ""
+                print(f"[Invoy] Change ({chg_ms:.0f} ms): {change_text[:60]}")
+            except Exception as exc:
+                print(f"[Invoy] Change inference error (non-fatal): {exc}")
                 change_text = ""
 
         # ── Log to SQLite ──────────────────────────────────────────────
+        # BUG FIX: session_id is set on the log object at construction time,
+        # NOT passed as a kwarg to log(). The log() signature does not accept it.
         try:
             self._log.log(
                 screenshot_path=path,
                 activity=activity_text,
                 change_summary=change_text,
                 model_name=self._config.model_id,
-                session_id=self._session_id,
+                activity_inference_ms=act_ms,
+                change_inference_ms=chg_ms if chg_ms else None,
             )
+            print("[Invoy] Entry saved to DB.")
         except Exception as exc:
-            # Don't abort; just warn
-            self._ui_error(f"DB log error (non-fatal): {exc}")
+            # Truly non-fatal — only print, do NOT call _ui_error
+            # (calling _on_error would flip the UI to Error state and confuse the user)
+            print(f"[Invoy] DB log error (non-fatal): {exc}")
 
         # ── Notify UI (thread-safe) ────────────────────────────────────
         self._root.after(
@@ -243,4 +327,6 @@ class InvoyRecorder:
         )
 
     def _ui_error(self, msg: str) -> None:
+        """Schedule a fatal error callback on the Tk thread."""
+        print(f"[Invoy] Fatal error: {msg}")
         self._root.after(0, lambda m=msg: self._on_error(m))
