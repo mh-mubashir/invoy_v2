@@ -30,7 +30,7 @@ from PIL import Image
 # SDK primitives
 try:
     from invoy_sdk.capture import ScreenshotCapture
-    from invoy_sdk.vlm_backends import Qwen2VLBackend
+    from invoy_sdk.vlm_backends import Qwen2VLBackend, InternVL2Backend, VLMBackend, _is_internvl2_model_id
     from invoy_sdk.activity_log import SQLiteActivityLog
     _SDK_AVAILABLE = True
 except ImportError:
@@ -70,30 +70,27 @@ def _resize_for_inference(src_path: str) -> str:
 # ── Prompts ────────────────────────────────────────────────────────────────
 
 ACTIVITY_PROMPT = (
-    "Look at this screenshot. Reply in this exact format:\n"
-    "[App] · [File or URL] · [specific action with enough detail to be useful]\n\n"
-    "Field rules:\n"
-    "- App: foreground application (e.g. VS Code, Chrome, Excel, Terminal)\n"
-    "- File or URL: full URL if a browser tab is active; file name if an editor is open; "
-    "document title for Office/PDF; current directory or command for a terminal; "
-    "window title otherwise\n"
-    "- Action: name the specific thing being worked on — mention function names, "
-    "topics, PR titles, error messages, or commands where visible. "
-    "Aim for 8-15 words.\n\n"
-    "e.g. VS Code · recorder.py · writing the _on_capture callback that triggers VLM inference\n"
-    "e.g. Chrome · github.com/org/repo/pull/47 · reviewing diff in the streaming response module\n"
-    "e.g. Terminal · ~/projects/invoy · running pytest on the activity log test suite\n"
-    "One line. No extra text."
+    "Reply with one line — no extra text:\n"
+    "App · File/URL · Action\n"
+    "\n"
+    "VS Code · auth.py · editing validate_token function\n"
+    "Chrome · https://github.com/user/repo/pull/42 · reviewing PR \"Add rate limiting\"\n"
+    "Terminal · ~/projects/invoy · running pytest tests/test_recorder.py\n"
+    "\n"
+    "- App: foreground application name\n"
+    "- File/URL: full URL, file name, or current directory\n"
+    "- Action: name a specific visible element — function name, URL path, command, "
+    "error message, heading, or PR title"
 )
 
 CHANGE_PROMPT_TMPL = (
-    "Before: {prev}\n"
-    "After: {curr}\n\n"
-    "Describe what changed or progressed between these two moments. "
-    "Cover: did the app, file, or URL change? Did the task or focus shift? "
-    "What specific progress was made?\n"
-    "Write one concise sentence. "
-    "Only if nothing at all changed, reply exactly: No significant change."
+    "Previous: {prev}\n"
+    "Current: {curr}\n\n"
+    "Each entry has three fields: App, File/URL, and Action.\n"
+    "Compare App, File/URL, and Action individually between the two entries.\n"
+    "Write one concise sentence describing what changed or progressed.\n"
+    "Reply 'No significant change' ONLY when App, File/URL, and Action are all three "
+    "identical between Previous and Current — if any single field differs, describe the change."
 )
 
 
@@ -128,7 +125,7 @@ class InvoyRecorder:
         self._on_model_loaded = on_model_loaded or (lambda: None)
 
         self._capture:    Optional[ScreenshotCapture] = None
-        self._backend:    Optional[Qwen2VLBackend]    = None
+        self._backend:    Optional[VLMBackend]        = None
         self._log:        Optional[SQLiteActivityLog] = None
         self._session_id: Optional[str]               = None
         self._prev_activity: Optional[str]            = None
@@ -170,6 +167,13 @@ class InvoyRecorder:
             except Exception:
                 pass
         self._capture = None
+        self._backend = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     def get_session_entries(self, limit: int = 200) -> list[dict]:
         """Return recent entries for the current session."""
@@ -231,12 +235,18 @@ class InvoyRecorder:
 
     def _load_model_then_capture(self) -> None:
         """Load the VLM (blocking), then start ScreenshotCapture. Runs in thread."""
-        print("[Invoy] Loading Qwen2-VL 2B model…")
+        print(f"[Invoy] Loading model {self._config.model_id}…")
         try:
-            self._backend = Qwen2VLBackend(
-                model_id=self._config.model_id,
-                device=self._config.device,
-            )
+            if _is_internvl2_model_id(self._config.model_id):
+                self._backend = InternVL2Backend(
+                    model_id=self._config.model_id,
+                    device=self._config.device,
+                )
+            else:
+                self._backend = Qwen2VLBackend(
+                    model_id=self._config.model_id,
+                    device=self._config.device,
+                )
             self._backend._ensure_loaded()
         except Exception as exc:
             print(f"[Invoy] Model load FAILED: {exc}")

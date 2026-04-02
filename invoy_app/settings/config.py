@@ -15,6 +15,14 @@ from pathlib import Path
 _CONFIG_DIR  = Path.home() / ".invoy"
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
 
+# Selectable models (display label → HuggingFace model ID)
+AVAILABLE_MODELS: dict[str, str] = {
+    "Qwen2-VL 2B":   "Qwen/Qwen2-VL-2B-Instruct",
+    "Qwen2.5-VL 3B": "Qwen/Qwen2.5-VL-3B-Instruct",
+    "InternVL2 2B":  "OpenGVLab/InternVL2-2B",
+    "InternVL2 4B":  "OpenGVLab/InternVL2-4B",
+}
+
 
 @dataclass
 class AppConfig:

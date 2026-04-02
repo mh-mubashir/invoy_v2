@@ -18,7 +18,7 @@ from typing import Callable
 
 import customtkinter as ctk
 
-from invoy_app.settings.config import AppConfig
+from invoy_app.settings.config import AppConfig, AVAILABLE_MODELS
 from invoy_app.styles.theme import COLORS, FONTS, RADIUS, SPACING
 
 
@@ -39,7 +39,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._recording_active = recording_active
 
         self.title("Invoy — Settings")
-        self.geometry("500x700")
+        self.geometry("500x780")
         self.resizable(False, False)
         self.configure(fg_color=COLORS["surface"])
         self.grab_set()   # make modal
@@ -162,6 +162,48 @@ class SettingsWindow(ctk.CTkToplevel):
                 text_color=COLORS["muted"],
             ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
 
+        # ---- Vision model ------------------------------------------
+        self._section("Vision Model")
+
+        _MODEL_LABELS  = list(AVAILABLE_MODELS.keys())
+        _MODEL_IDS     = list(AVAILABLE_MODELS.values())
+        current_model_label = _MODEL_LABELS[
+            _MODEL_IDS.index(self._config.model_id)
+            if self._config.model_id in _MODEL_IDS else 0
+        ]
+        self._model_var = tk.StringVar(value=current_model_label)
+
+        self._model_btn = ctk.CTkSegmentedButton(
+            self,
+            values=_MODEL_LABELS,
+            variable=self._model_var,
+            fg_color=COLORS["elevated"],
+            selected_color=COLORS["accent"],
+            selected_hover_color=COLORS["accent_hover"],
+            unselected_color=COLORS["elevated"],
+            unselected_hover_color=COLORS["border"],
+            text_color=COLORS["text"],
+            font=FONTS["body"],
+            corner_radius=RADIUS,
+        )
+        self._model_btn.pack(anchor="w", padx=pad, pady=(0, 2))
+
+        if self._recording_active:
+            self._model_btn.configure(state="disabled")
+            ctk.CTkLabel(
+                self,
+                text="Stop the current session to change the vision model.",
+                font=FONTS["small"],
+                text_color=COLORS["muted"],
+            ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
+        else:
+            ctk.CTkLabel(
+                self,
+                text="3B is more accurate; 2B is faster. Applies from the next session.",
+                font=FONTS["small"],
+                text_color=COLORS["muted"],
+            ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
+
         # ---- Notifications -----------------------------------------
         self._section("Windows Notifications")
         self._notif_var = tk.BooleanVar(value=self._config.notifications_enabled)
@@ -243,12 +285,15 @@ class SettingsWindow(ctk.CTkToplevel):
             if chosen_label in _DEVICE_LABELS else 0
         ]
 
+        chosen_model_label = self._model_var.get()
+        model_id = AVAILABLE_MODELS.get(chosen_model_label, self._config.model_id)
+
         new_cfg = AppConfig(
             claude_api_key=self._key_var.get().strip(),
             db_path=self._db_var.get().strip(),
             screenshot_dir=self._ss_var.get().strip(),
             interval_seconds=max(5.0, interval),
-            model_id=self._config.model_id,
+            model_id=model_id,
             device=device,
             appearance_mode=self._appearance_var.get().lower(),
             notifications_enabled=self._notif_var.get(),

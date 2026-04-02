@@ -29,7 +29,7 @@ from invoy_app.core.recorder import InvoyRecorder
 from invoy_app.core.notifier import WindowsNotifier
 from invoy_app.core.summarizer import ClaudeSummarizer
 from invoy_app.styles.theme import (
-    COLORS, SPACING,
+    COLORS, FONTS, SPACING,
     WINDOW_W, WINDOW_H, WINDOW_MIN_W, WINDOW_MIN_H,
 )
 
@@ -292,7 +292,7 @@ class InvoyApp(ctk.CTk):
         err_lbl = _ctk.CTkLabel(
             self._content_frame,
             text=f"Error: {message}",
-            font=("Segoe UI", 12),
+            font=FONTS["status"],
             text_color=COLORS["danger"],
         )
         err_lbl.place(relx=0.5, rely=0.95, anchor="s")
@@ -370,6 +370,7 @@ class InvoyApp(ctk.CTk):
 
     def _on_settings_saved(self, new_config: AppConfig) -> None:
         self._config = new_config
+        self._recorder._config = new_config
         self._summarizer.update_api_key(new_config.claude_api_key)
         ctk.set_appearance_mode(new_config.appearance_mode)
 
@@ -379,7 +380,12 @@ class InvoyApp(ctk.CTk):
 
     def _short_model_label(self) -> str:
         mid = self._config.model_id
-        # e.g. "Qwen/Qwen2-VL-2B-Instruct" → "Qwen2-VL 2B"
+        if "InternVL2-4B" in mid or "InternVL2_4B" in mid:
+            return "InternVL2 4B"
+        if "InternVL2-2B" in mid or "InternVL2_2B" in mid:
+            return "InternVL2 2B"
+        if "3B" in mid:
+            return "Qwen2.5-VL 3B"
         if "2B" in mid:
             return "Qwen2-VL 2B"
         if "7B" in mid:
