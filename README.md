@@ -22,6 +22,47 @@ That script writes:
 - Per-model per-frame rows into `simplified_activity_entries` (in each run DB)
 - Side-by-side joins into `model_comparison_results` (in the eval DB)
 
+## Evaluation pipeline (current)
+
+Use this when you already have:
+- `qwen2vl2b_gpu_activity_change.db`
+- `qwen25vl3b_gpu_activity_change.db`
+
+### Script responsibilities
+
+1) `tools/inspect_simplified_db.py`
+- Purpose: DB sanity check before evaluation
+- Confirms: tables, columns, run labels, and sample rows
+
+2) `evaluate_simplified_compare.py`
+- Purpose: rebuild analytic evaluation outputs without rerunning models
+- Reads `simplified_activity_entries` from both model DBs
+- Rebuilds `model_compare_eval_gpu.db` tables:
+  - `model_comparison_results` (legacy compatibility)
+  - `frame_eval` (analytic metrics)
+- Exports:
+  - `eval_reports/eval_frames.csv`
+  - `eval_reports/disagreements_top50.csv`
+
+3) `plot_compare_eval.py`
+- Purpose: create publication-style visual summaries
+- Reads `frame_eval` from `model_compare_eval_gpu.db` (or CSV)
+- Writes:
+  - `eval_reports/plots/activity_cosine_hist.png`
+  - `eval_reports/plots/change_cosine_hist.png` (if `change_cosine` is present)
+  - `eval_reports/plots/drift_timeseries.png`
+  - `eval_reports/plots/top_disagreements.csv`
+
+### Recommended execution order
+
+```bash
+python tools/inspect_simplified_db.py
+python evaluate_simplified_compare.py --export-dir eval_reports
+python plot_compare_eval.py --eval-db model_compare_eval_gpu.db --out-dir eval_reports/plots
+```
+
+See [eval_reports/README.md](eval_reports/README.md) for detailed artifact interpretation.
+
 ## Smoke tests / demos
 
 Smoke test (same backend as the SDK):

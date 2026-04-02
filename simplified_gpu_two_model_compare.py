@@ -3,10 +3,9 @@
 Simplified two-model GPU workflow:
 1) Run model A over screenshots -> simplified_activity_entries
 2) Run model B over screenshots -> simplified_activity_entries
-3) Persist side-by-side comparison -> model_comparison_results
 
-This script intentionally uses a reduced schema focused on descriptive activity
-and change text with extracted evidence.
+This script intentionally writes simplified run outputs only.
+Evaluation/comparison should be run separately via evaluate_simplified_compare.py.
 """
 
 from __future__ import annotations
@@ -38,33 +37,6 @@ CREATE TABLE IF NOT EXISTS simplified_activity_entries (
 CREATE INDEX IF NOT EXISTS idx_simplified_run_label ON simplified_activity_entries(run_label);
 CREATE INDEX IF NOT EXISTS idx_simplified_frame_idx ON simplified_activity_entries(frame_index);
 CREATE INDEX IF NOT EXISTS idx_simplified_shot_path ON simplified_activity_entries(screenshot_path);
-"""
-
-SCHEMA_COMPARE = """
-CREATE TABLE IF NOT EXISTS model_comparison_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    frame_index INTEGER NOT NULL,
-    screenshot_path TEXT NOT NULL,
-    model_a_name TEXT NOT NULL,
-    model_b_name TEXT NOT NULL,
-    model_a_activity_text TEXT,
-    model_b_activity_text TEXT,
-    model_a_change_text TEXT,
-    model_b_change_text TEXT,
-    model_a_activity_extracted_text TEXT,
-    model_b_activity_extracted_text TEXT,
-    model_a_change_prev_extracted_text TEXT,
-    model_b_change_prev_extracted_text TEXT,
-    model_a_change_cur_extracted_text TEXT,
-    model_b_change_cur_extracted_text TEXT,
-    has_change_a INTEGER NOT NULL,
-    has_change_b INTEGER NOT NULL,
-    change_presence_match INTEGER NOT NULL,
-    activity_exact_match INTEGER NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_compare_frame_idx ON model_comparison_results(frame_index);
-CREATE INDEX IF NOT EXISTS idx_compare_shot_path ON model_comparison_results(screenshot_path);
 """
 
 ACTIVITY_PROMPT = (
@@ -120,12 +92,6 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="qwen25vl3b_gpu_activity_change.db",
         help="Output DB for model B simplified rows.",
-    )
-    parser.add_argument(
-        "--eval-db",
-        type=str,
-        default="model_compare_eval_gpu.db",
-        help="Output DB for model comparison results.",
     )
     parser.add_argument("--run-a-label", type=str, default="run_qwen2vl2b_gpu", help="run_label for model A.")
     parser.add_argument("--run-b-label", type=str, default="run_qwen25vl3b_gpu", help="run_label for model B.")
@@ -303,99 +269,6 @@ def run_single_model(
     return count
 
 
-def persist_comparison(
-    *,
-    db_a: Path,
-    db_b: Path,
-    eval_db: Path,
-    run_a_label: str,
-    run_b_label: str,
-) -> int:
-    conn_a = _ensure_schema(db_a, SCHEMA_RUN)
-    conn_b = _ensure_schema(db_b, SCHEMA_RUN)
-    conn_eval = _ensure_schema(eval_db, SCHEMA_COMPARE)
-    conn_eval.execute("DELETE FROM model_comparison_results")
-    conn_eval.commit()
-
-    a_rows = conn_a.execute(
-        """
-        SELECT screenshot_path, frame_index, model_name,
-               activity_text, activity_extracted_text,
-               change_text, change_prev_extracted_text, change_cur_extracted_text
-        FROM simplified_activity_entries
-        WHERE run_label = ?
-        ORDER BY frame_index ASC
-        """,
-        (run_a_label,),
-    ).fetchall()
-    b_rows = conn_b.execute(
-        """
-        SELECT screenshot_path, frame_index, model_name,
-               activity_text, activity_extracted_text,
-               change_text, change_prev_extracted_text, change_cur_extracted_text
-        FROM simplified_activity_entries
-        WHERE run_label = ?
-        ORDER BY frame_index ASC
-        """,
-        (run_b_label,),
-    ).fetchall()
-
-    b_by_key = {(r[1], r[0]): r for r in b_rows}
-    inserted = 0
-    for a in a_rows:
-        key = (a[1], a[0])
-        b = b_by_key.get(key)
-        if not b:
-            continue
-        has_change_a = 1 if _normalize_text(a[5]) else 0
-        has_change_b = 1 if _normalize_text(b[5]) else 0
-        change_presence_match = 1 if has_change_a == has_change_b else 0
-        activity_exact_match = 1 if _normalize_text(a[3]) == _normalize_text(b[3]) else 0
-
-        conn_eval.execute(
-            """
-            INSERT INTO model_comparison_results (
-                frame_index, screenshot_path,
-                model_a_name, model_b_name,
-                model_a_activity_text, model_b_activity_text,
-                model_a_change_text, model_b_change_text,
-                model_a_activity_extracted_text, model_b_activity_extracted_text,
-                model_a_change_prev_extracted_text, model_b_change_prev_extracted_text,
-                model_a_change_cur_extracted_text, model_b_change_cur_extracted_text,
-                has_change_a, has_change_b, change_presence_match, activity_exact_match,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            """,
-            (
-                a[1],
-                a[0],
-                a[2],
-                b[2],
-                _normalize_text(a[3]),
-                _normalize_text(b[3]),
-                _normalize_text(a[5]),
-                _normalize_text(b[5]),
-                _normalize_text(a[4]),
-                _normalize_text(b[4]),
-                _normalize_text(a[6]),
-                _normalize_text(b[6]),
-                _normalize_text(a[7]),
-                _normalize_text(b[7]),
-                has_change_a,
-                has_change_b,
-                change_presence_match,
-                activity_exact_match,
-            ),
-        )
-        inserted += 1
-
-    conn_eval.commit()
-    conn_a.close()
-    conn_b.close()
-    conn_eval.close()
-    return inserted
-
-
 def main() -> None:
     args = parse_args()
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -451,15 +324,6 @@ def main() -> None:
         db_commit_every=args.db_commit_every,
     )
     logger.info("Run B rows written: %d", count_b)
-
-    compared = persist_comparison(
-        db_a=Path(args.run_a_db),
-        db_b=Path(args.run_b_db),
-        eval_db=Path(args.eval_db),
-        run_a_label=args.run_a_label,
-        run_b_label=args.run_b_label,
-    )
-    logger.info("Comparison rows written: %d", compared)
     logger.info("Done.")
 
 
