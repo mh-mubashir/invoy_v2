@@ -123,11 +123,11 @@ def _run_agent(role: str, task_prompt: str, timeout_s: int = 300) -> bool:
         f"{task_prompt}"
     )
 
-    print(f"\n[orchestrator] ── Running {role.upper()} agent ──")
+    print(f"\n[orchestrator] --- Running {role.upper()} agent ---")
 
     env = os.environ.copy()
-    # Suppress Node.js deprecation warnings that pollute agent output
-    env["NODE_NO_WARNINGS"] = "1"
+    env["NODE_NO_WARNINGS"] = "1"   # suppress Node.js deprecation warnings
+    env["PYTHONUTF8"] = "1"         # ensure UTF-8 stdout on Windows
 
     result = subprocess.run(
         [_CLAUDE_BIN, "--print", "--system", system_prompt, full_prompt],
@@ -259,7 +259,7 @@ def run_full_pipeline() -> int:
 
     for loop in range(1, _MAX_LOOPS + 1):
         _LOOP_FILE.write_text(str(loop))
-        print(f"\n[orchestrator] ── Loop {loop}/{_MAX_LOOPS} ──")
+        print(f"\n[orchestrator] --- Loop {loop}/{_MAX_LOOPS} ---")
 
         # Phase 2: Programmer
         if not phase_programmer():
