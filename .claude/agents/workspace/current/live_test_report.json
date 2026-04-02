@@ -1,0 +1,137 @@
+{
+  "overall": "rework",
+  "test_date": "2026-04-02",
+  "transformers_version": "4.49.0",
+  "note_on_compatibility": "transformers 5.3.0 was installed; it was downgraded to 4.49.0 to work around three breaking changes in the InternVL2 remote-code model files (DynamicCache API, GenerationMixin removal, all_tied_weights_keys shape). The cached model files also needed a one-line patch to avoid a meta-tensor .item() call during device_map='auto' initialization. These issues will affect any Invoy user running transformers>=5.0 and must be addressed before shipping.",
+  "quality_assessment": {
+    "total_inferences": 6,
+    "responded_count": 6,
+    "format_ok_count": 4,
+    "format_ok_pct": 67,
+    "unique_responses": 5,
+    "reads_screen": true,
+    "no_response_count": 0,
+    "per_model_variation": {
+      "OpenGVLab/InternVL2-2B": true,
+      "OpenGVLab/InternVL2-4B": true
+    }
+  },
+  "db_evidence": {
+    "entries": [
+      {
+        "model_id": "OpenGVLab/InternVL2-2B",
+        "screenshot": "screenshot_20260402_053101.png",
+        "infer_path": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053101_thumb.png",
+        "response": "App: VS Code\nFile/URL: https://github.com/user/repo/pull/42\nAction: reviewing PR \"Add rate limiting\"",
+        "inference_ms": 1586.0,
+        "error": null,
+        "format_has_bullet": false,
+        "format_note": "Uses label: value format instead of App \u00b7 File/URL \u00b7 Action on one line. Content looks like a hallucination of the prompt examples."
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-2B",
+        "screenshot": "screenshot_20260402_053336.png",
+        "infer_path": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053336_thumb.png",
+        "response": "VS Code \u00b7 auth.py \u00b7 editing validate_token function",
+        "inference_ms": 340.0,
+        "error": null,
+        "format_has_bullet": true,
+        "format_note": "Correct App \u00b7 File/URL \u00b7 Action format on one line. Grounded response."
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-2B",
+        "screenshot": "screenshot_20260402_053609.png",
+        "infer_path": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053609_thumb.png",
+        "response": "VS Code \u00b7 auth.py \u00b7 editing validate_token function",
+        "inference_ms": 355.0,
+        "error": null,
+        "format_has_bullet": true,
+        "format_note": "Correct format. Identical to screenshot_2 response despite different screenshot — possible hallucination/stuck output."
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-4B",
+        "screenshot": "screenshot_20260402_053101.png",
+        "infer_path": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053101_thumb.png",
+        "response": "- App: Invoke\n- File/URL: https://github.com/user/repo/pull/42\n- Action: Reviewing PR \"Add rate limiting\"",
+        "inference_ms": 2392.0,
+        "error": null,
+        "format_has_bullet": false,
+        "format_note": "Wrong format (markdown list, multi-line). App name 'Invoke' is hallucinated — likely confused by the project name 'invoy'. URL looks like a prompt example hallucination."
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-4B",
+        "screenshot": "screenshot_20260402_053336.png",
+        "infer_path": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053336_thumb.png",
+        "response": "App \u00b7 File/URL \u00b7 Action",
+        "inference_ms": 504.0,
+        "error": null,
+        "format_has_bullet": true,
+        "format_note": "Returned the format header string verbatim — did not actually describe the screen. Degenerate output."
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-4B",
+        "screenshot": "screenshot_20260402_053609.png",
+        "infer_path": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053609_thumb.png",
+        "response": "App \u00b7 File/URL \u00b7 Action\nChrome \u00b7 https://github.com/user/repo/pull/42 \u00b7 reviewing PR \"Add rate limiting\"\nTerminal \u00b7 ~/projects/invoy \u00b7 running pytest tests/test_recorder.py\n\n- App: foreground application name\n- File/URL: full URL, file name, or current directory\n- Action: name a specific visible element \u2014 function name, URL path, command, error message, heading, or PR title",
+        "inference_ms": 4830.0,
+        "error": null,
+        "format_has_bullet": true,
+        "format_note": "Echoed the entire ACTIVITY_PROMPT verbatim including examples and field descriptions. Complete prompt echo — not reading the screen at all."
+      }
+    ],
+    "format_separator": "\u00b7 (U+00B7 middle dot)",
+    "expected_format": "App \u00b7 File/URL \u00b7 Action"
+  },
+  "per_model_assessment": {
+    "OpenGVLab/InternVL2-2B": {
+      "load_time_s": 12.7,
+      "inference_ms_range": "340-1586ms",
+      "format_correct_count": 2,
+      "format_correct_pct": 67,
+      "reads_screen": true,
+      "hallucinations": [
+        "screenshot_20260402_053101: output is verbatim prompt example text (VS Code/GitHub PR) not from the actual screen",
+        "screenshot_20260402_053609: identical response to screenshot_20260402_053336 despite different content"
+      ],
+      "verdict": "rework",
+      "notes": "2 of 3 screenshots produce the correct one-line format at 340-355ms per inference — fast and usable when working. The first screenshot (1586ms, highest complexity) triggers prompt-echo hallucination. The third screenshot returns the same output as the second, suggesting the model ignored the image content."
+    },
+    "OpenGVLab/InternVL2-4B": {
+      "load_time_s": 7.2,
+      "inference_ms_range": "504-4830ms",
+      "format_correct_count": 1,
+      "format_correct_pct": 33,
+      "reads_screen": false,
+      "hallucinations": [
+        "screenshot_20260402_053101: 'Invoke' as app name (hallucinated from project name), GitHub PR URL from prompt example",
+        "screenshot_20260402_053336: returned only the format header line 'App \u00b7 File/URL \u00b7 Action' — degenerate",
+        "screenshot_20260402_053609: echoed the entire ACTIVITY_PROMPT including examples and field descriptions"
+      ],
+      "verdict": "fail",
+      "notes": "4B model fails completely: it either hallucinates the app name from the project context, returns the format header as a no-op, or echoes the entire prompt verbatim. None of the 3 outputs describe what is actually visible on screen. The larger model is significantly worse than the smaller one for this prompt format."
+    }
+  },
+  "environment_issues": {
+    "missing_packages_at_start": ["sentencepiece", "tiktoken", "einops", "protobuf", "timm"],
+    "transformers_version_incompatibility": "transformers 5.3.0 breaks InternVL2 on 4 axes: meta-tensor .item() in InternVisionEncoder.__init__ during device_map='auto' init, all_tied_weights_keys must be a dict not a list, GenerationMixin not inherited by CausalLM submodels, DynamicCache.seen_tokens removed. Downgrade to 4.49.0 required for successful inference.",
+    "cached_model_patches_applied": [
+      "modeling_intern_vit.py (2B + 4B): torch.linspace(...).tolist() instead of [x.item() for x in torch.linspace(...)]",
+      "modeling_internvl_chat.py (2B + 4B): added all_tied_weights_keys = {} and _tied_weights_keys = []",
+      "modeling_internlm2.py (2B): added GenerationMixin to InternLM2ForCausalLM base classes",
+      "modeling_phi3.py (4B): added GenerationMixin to Phi3ForCausalLM base classes"
+    ],
+    "recommendation": "Pin transformers<5.0 in requirements.txt when shipping InternVL2 support."
+  },
+  "observations": [
+    "Both models load and run inference on transformers 4.49.0 after the described patches.",
+    "InternVL2-2B produces the correct App \u00b7 File/URL \u00b7 Action format for 2/3 screenshots at 340-355ms per inference.",
+    "InternVL2-2B's first screenshot (1586ms, highest complexity image) returns prompt example text, not screen content.",
+    "InternVL2-4B does not reliably read the screen at all: all 3 outputs are degenerate or hallucinated.",
+    "InternVL2-4B inference is also slower (up to 4830ms) despite being a larger model, likely due to eager attention (no flash-attn).",
+    "_resize_for_inference() correctly scaled 2560x1600 screenshots to 1280x800 before InternVL2 further resizes to 448x448.",
+    "The fixed 448x448 BICUBIC resize inside InternVL2Backend may limit screen text legibility compared to Qwen2-VL's dynamic tiling.",
+    "transformers 4.49.0 emits a seen_tokens deprecation warning for the 4B model but inference completes successfully."
+  ],
+  "summary": "InternVL2-2B is conditionally viable for Invoy: fast at 340ms when working correctly, but produces prompt-echo hallucinations on complex screenshots. InternVL2-4B is not production-ready for this task. Both models require transformers<5.0 pinned and 5 additional pip packages. The 448x448 fixed-resize preprocessing is a known quality ceiling compared to Qwen2-VL's approach.",
+  "status": "done"
+}

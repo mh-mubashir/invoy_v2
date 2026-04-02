@@ -1,0 +1,59 @@
+{
+  "status": "fail",
+  "summary": "The Programmer agent implemented the wrong specification. All six acceptance criteria for the InternVL2 backend feature are unmet. Additionally, ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL in recorder.py were modified, which is explicitly listed as out-of-scope in spec.json. The implementation.md describes prompt-engineering changes (a prior pipeline run), not the InternVL2 backend changes required by the current spec.",
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "description": "invoy_sdk/vlm_backends.py exports `_is_internvl2_model_id(model_id: str) -> bool`",
+      "status": "fail",
+      "finding": "The function does not exist in vlm_backends.py. Only `_is_qwen25_model_id` is present. Nothing related to InternVL2 was added to this file."
+    },
+    {
+      "id": "AC-2",
+      "description": "invoy_sdk/vlm_backends.py contains class `InternVL2Backend(VLMBackend)` with correct log_model_name, generate() signature, model.chat() inference, and (None, 0.0) fallback",
+      "status": "fail",
+      "finding": "InternVL2Backend does not exist in vlm_backends.py. The file ends at line 193 with only VLMBackend (ABC) and Qwen2VLBackend. No new class was added."
+    },
+    {
+      "id": "AC-3",
+      "description": "invoy_app/settings/config.py defines AVAILABLE_MODELS with exactly four entries including InternVL2 2B and InternVL2 4B",
+      "status": "fail",
+      "finding": "AVAILABLE_MODELS (config.py lines 19-22) contains only two entries: 'Qwen2-VL 2B' and 'Qwen2.5-VL 3B'. The required 'InternVL2 2B' -> 'OpenGVLab/InternVL2-2B' and 'InternVL2 4B' -> 'OpenGVLab/InternVL2-4B' entries are absent."
+    },
+    {
+      "id": "AC-4",
+      "description": "invoy_app/core/recorder.py imports InternVL2Backend and _is_internvl2_model_id; _load_model_then_capture dispatches on model type; self._backend typed as Optional[VLMBackend]",
+      "status": "fail",
+      "finding": "recorder.py still imports only `Qwen2VLBackend` from invoy_sdk.vlm_backends (line 33). No import of InternVL2Backend or _is_internvl2_model_id. The type annotation on line 128 remains `Optional[Qwen2VLBackend]` instead of `Optional[VLMBackend]`. _load_model_then_capture (line 236) unconditionally instantiates Qwen2VLBackend with no dispatch logic."
+    },
+    {
+      "id": "AC-5",
+      "description": "invoy_app/app.py `_short_model_label()` checks InternVL2-4B/InternVL2_4B first, then InternVL2-2B/InternVL2_2B, before existing 3B/2B/7B checks",
+      "status": "fail",
+      "finding": "_short_model_label() (app.py lines 381-389) only checks for '3B', '2B', and '7B'. No InternVL2 checks were added. As a consequence, 'OpenGVLab/InternVL2-2B' would incorrectly return 'Qwen2-VL 2B' (matched by the '2B' check), and 'OpenGVLab/InternVL2-4B' would fall through to the truncated model ID fallback."
+    },
+    {
+      "id": "AC-6",
+      "description": "InternVL2Backend uses torchvision Resize(448,448)/ToTensor/Normalize, bfloat16 pixel_values, AutoModel + AutoTokenizer with trust_remote_code=True",
+      "status": "fail",
+      "finding": "InternVL2Backend was never created, so no preprocessing or loading logic exists to verify."
+    }
+  ],
+  "out_of_scope_violations": [
+    {
+      "rule": "Do not change ACTIVITY_PROMPT or CHANGE_PROMPT_TMPL in recorder.py",
+      "finding": "Both ACTIVITY_PROMPT (recorder.py lines 72-84) and CHANGE_PROMPT_TMPL (lines 86-94) were modified. The implementation.md explicitly documents these changes as the sole work done. This is a direct violation of the out-of-scope constraint in spec.json."
+    }
+  ],
+  "implementation_md_mismatch": {
+    "description": "The implementation.md describes a prompt-engineering task (rewriting ACTIVITY_PROMPT with few-shot examples and tightening CHANGE_PROMPT_TMPL). This corresponds to a different prior spec, not the current spec.json which requires adding InternVL2 backend support. The Programmer agent appears to have executed the wrong spec.",
+    "evidence": "implementation.md claims AC-1 through AC-6 cover prompt word counts and example formatting — those labels do not match the AC IDs in the current spec.json, which cover _is_internvl2_model_id, InternVL2Backend, AVAILABLE_MODELS, recorder dispatch, _short_model_label, and torchvision preprocessing."
+  },
+  "files_checked": [
+    "invoy_sdk/vlm_backends.py",
+    "invoy_app/settings/config.py",
+    "invoy_app/core/recorder.py",
+    "invoy_app/app.py"
+  ],
+  "recommended_action": "Return to Programmer with the correct spec.json. Required changes: (1) add `_is_internvl2_model_id` and `InternVL2Backend` to invoy_sdk/vlm_backends.py, (2) expand AVAILABLE_MODELS to four entries in config.py, (3) update recorder.py imports, type annotation on self._backend, and add dispatch logic in _load_model_then_capture, (4) prepend InternVL2-4B and InternVL2-2B checks to _short_model_label() in app.py. The modifications to ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL should be reverted as they violate the out-of-scope constraint."
+}

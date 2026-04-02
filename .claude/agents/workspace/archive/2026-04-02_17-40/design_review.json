@@ -1,0 +1,24 @@
+{
+  "status": "done",
+  "verdict": "approved_with_notes",
+  "issues": [
+    {
+      "id": "D-1",
+      "severity": "minor",
+      "file": "invoy_app/app.py",
+      "line_reference": "line 295 — font= parameter on error label in _on_error()",
+      "violation": "Raw font tuple ('Segoe UI', 12) used instead of a FONTS token. CLAUDE.md and designer role both mandate: 'Only FONTS[\"key\"] values in component files — never raw tuples like (\"Segoe UI\", 13)'.",
+      "fix": "Import FONTS from invoy_app.styles.theme and replace font=(\"Segoe UI\", 12) with font=FONTS[\"body\"] (or whichever token is closest in size to 12px). This pre-exists the current spec change but the Programmer will touch this function area, so it should be fixed in the same pass."
+    }
+  ],
+  "positive_notes": [
+    "The _short_model_label() change (AC-5) is pure string-matching logic — it introduces no new UI tokens, no new widgets, no hardcoded colours or spacing. There is no design regression risk from that change itself.",
+    "The AVAILABLE_MODELS change in config.py is a data-only dict update — no UI surface is affected directly. settings_window.py already iterates AVAILABLE_MODELS dynamically, so the two new InternVL2 entries will appear in the dropdown with the same styling as the existing Qwen entries without any template changes.",
+    "The existing _on_error() label correctly uses COLORS['danger'] for text_color — the semantic colour choice is right. Only the font tuple is wrong.",
+    "The content_frame uses corner_radius=0 correctly because it butts against the window edge, which is the documented exception to the RADIUS rule.",
+    "No new absolute pixel positioning is introduced by any of the spec changes."
+  ],
+  "pre_existing_issue_note": "D-1 is a pre-existing violation in the codebase, not introduced by this spec. However, because _on_error() is in app.py which is listed in files_to_change, and the Programmer will be editing that file for AC-5, it is the correct moment to remediate it. Leaving it would be a missed opportunity but does not block this spec from shipping — hence 'minor' severity and 'approved_with_notes' verdict.",
+  "design_constraints_from_spec": "spec.json lists design_constraints: [] — the PM explicitly declared no design constraints for this task. The review above covers only pre-existing token violations discovered during the mandatory file scan.",
+  "summary": "The spec is design-safe. The only issue found is a pre-existing raw font tuple on the error label in _on_error() (line 295 of app.py) — a minor token violation that should be fixed while the Programmer is already editing that file for AC-5. All other changes in this spec (AVAILABLE_MODELS dict entries in config.py and the _short_model_label() string-matching logic in app.py) are purely non-visual and carry zero design regression risk. The settings dropdown will render the two new InternVL2 entries identically to the existing Qwen entries because settings_window.py iterates AVAILABLE_MODELS dynamically with no per-entry styling. Verdict: approved_with_notes — Programmer may fix D-1 inline or defer to a follow-up task."
+}

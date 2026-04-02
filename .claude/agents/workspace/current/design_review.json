@@ -1,0 +1,86 @@
+{
+  "status": "fail",
+  "summary": "Zero of six acceptance criteria were implemented. The programmer made changes exclusively to ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL in recorder.py — work that is explicitly listed under out_of_scope in spec.json — while leaving every required change (InternVL2Backend class, _is_internvl2_model_id helper, AVAILABLE_MODELS expansion, recorder dispatch widening, _short_model_label InternVL2 branches) completely absent from the codebase.",
+
+  "ac_results": [
+    {
+      "id": "AC-1",
+      "description": "invoy_sdk/vlm_backends.py exports _is_internvl2_model_id(model_id: str) -> bool",
+      "verdict": "FAIL",
+      "detail": "Function does not exist. The file only defines _is_qwen25_model_id. No InternVL2 detection helper was added."
+    },
+    {
+      "id": "AC-2",
+      "description": "InternVL2Backend(VLMBackend) class with correct log_model_name, generate() signature, model.chat() inference, and (None, 0.0) error return",
+      "verdict": "FAIL",
+      "detail": "Class does not exist anywhere in vlm_backends.py. File ends at line 193 with only Qwen2VLBackend defined."
+    },
+    {
+      "id": "AC-3",
+      "description": "AVAILABLE_MODELS contains exactly four entries including InternVL2 2B and InternVL2 4B",
+      "verdict": "FAIL",
+      "detail": "config.py AVAILABLE_MODELS still has only two entries: 'Qwen2-VL 2B' and 'Qwen2.5-VL 3B'. InternVL2 entries were never added."
+    },
+    {
+      "id": "AC-4",
+      "description": "recorder.py imports InternVL2Backend and _is_internvl2_model_id; _load_model_then_capture dispatches on _is_internvl2_model_id; self._backend typed as Optional[VLMBackend]",
+      "verdict": "FAIL",
+      "detail": "recorder.py line 33 still imports only Qwen2VLBackend. VLMBackend is not imported. self._backend on line 128 is still typed Optional[Qwen2VLBackend]. _load_model_then_capture on line 240 unconditionally instantiates Qwen2VLBackend with no dispatch conditional."
+    },
+    {
+      "id": "AC-5",
+      "description": "_short_model_label() in app.py checks InternVL2-4B/InternVL2_4B and InternVL2-2B/InternVL2_2B before the existing 2B/3B/7B checks",
+      "verdict": "FAIL",
+      "detail": "app.py _short_model_label() (lines 382-389) only checks '3B', '2B', '7B' in that order. No InternVL2 branches were added. A user selecting 'InternVL2 2B' (model_id 'OpenGVLab/InternVL2-2B') would hit the '2B' branch first and receive the incorrect label 'Qwen2-VL 2B' — the exact regression called out in spec.json risk_flags."
+    },
+    {
+      "id": "AC-6",
+      "description": "InternVL2Backend uses torchvision Resize(448,448,BICUBIC)/ToTensor/Normalize, bfloat16 pixel_values, AutoModel + AutoTokenizer with trust_remote_code=True",
+      "verdict": "FAIL",
+      "detail": "No InternVL2Backend class exists; therefore none of the preprocessing, model loading, or inference requirements can be evaluated."
+    }
+  ],
+
+  "out_of_scope_violations": [
+    {
+      "file": "invoy_app/core/recorder.py",
+      "lines": "72-94",
+      "description": "ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL were rewritten. spec.json out_of_scope[0] explicitly states: 'Do not change ACTIVITY_PROMPT or CHANGE_PROMPT_TMPL in recorder.py'. These changes must be reverted, or confirmed as pre-existing (i.e. present before this task ran)."
+    }
+  ],
+
+  "ux_and_label_issues": [
+    {
+      "severity": "high",
+      "component": "app.py _short_model_label()",
+      "issue": "InternVL2 model IDs not recognised. If AVAILABLE_MODELS were later corrected without fixing this method, selecting 'InternVL2 2B' would display 'Qwen2-VL 2B' in the recording status bar and idle view subtitle, directly misleading the user about which model is active.",
+      "fix": "Add InternVL2-4B/InternVL2_4B check, then InternVL2-2B/InternVL2_2B check, before the existing '2B' substring branch — exactly as specified in AC-5."
+    },
+    {
+      "severity": "medium",
+      "component": "invoy_app/settings/config.py AVAILABLE_MODELS",
+      "issue": "The Settings window model dropdown reads AVAILABLE_MODELS dynamically (settings_window.py). With only two entries, users have no way to select InternVL2 models from the UI.",
+      "fix": "Add 'InternVL2 2B': 'OpenGVLab/InternVL2-2B' and 'InternVL2 4B': 'OpenGVLab/InternVL2-4B' as the third and fourth entries."
+    },
+    {
+      "severity": "medium",
+      "component": "invoy_app/core/recorder.py _load_model_then_capture()",
+      "issue": "If a user sets config.model_id to an InternVL2 ID via direct config.json edit, recorder.py would silently attempt to load it with Qwen2VLBackend (AutoProcessor + apply_chat_template), causing an opaque runtime crash rather than a clean user-facing error message.",
+      "fix": "Implement the dispatch conditional per AC-4 so InternVL2 IDs route to InternVL2Backend."
+    }
+  ],
+
+  "design_token_compliance": {
+    "verdict": "N/A",
+    "detail": "No UI component files were modified. spec.json design_constraints is empty. No hardcoded hex values, font tuples, or pixel sizes were introduced. Token compliance cannot be evaluated for backend-only work."
+  },
+
+  "required_actions_for_programmer": [
+    "Revert ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL in recorder.py to their pre-task state (or confirm with a git diff that they were already present before this task).",
+    "Add _is_internvl2_model_id() to invoy_sdk/vlm_backends.py (AC-1).",
+    "Add InternVL2Backend class to invoy_sdk/vlm_backends.py with torchvision preprocessing (Resize 448x448 BICUBIC, ToTensor, Normalize IMAGENET), bfloat16 pixel_values, AutoModel/AutoTokenizer loading with trust_remote_code=True, model.chat() inference, and (None, 0.0) exception guard (AC-2, AC-6).",
+    "Expand AVAILABLE_MODELS in config.py with InternVL2 2B and InternVL2 4B entries (AC-3).",
+    "Update recorder.py: add InternVL2Backend and _is_internvl2_model_id inside the try-import block, widen self._backend to Optional[VLMBackend] (importing VLMBackend), add dispatch conditional in _load_model_then_capture (AC-4).",
+    "Update _short_model_label() in app.py: add InternVL2-4B/InternVL2_4B and InternVL2-2B/InternVL2_2B checks before the existing '2B' substring check (AC-5)."
+  ]
+}
