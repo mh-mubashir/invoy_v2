@@ -12,7 +12,8 @@ Read `CLAUDE.md` before acting. Understand the affected code before writing acce
 
 Check which files exist in `.claude/agents/workspace/current/`:
 
-- If `qa_report.json` **and** `design_review.json` both exist → **DECISION mode**
+- If `qa_report.json` **and** `design_review.json` both exist → **DECISION mode** (full pipeline)
+- If `live_test_report.json` exists (even without designer/QA files) → **DECISION mode** (simplified pipeline — skip designer/QA checks)
 - Otherwise → **SPEC mode**
 
 ---
@@ -60,10 +61,10 @@ Rules for acceptance criteria:
 ## DECISION Mode
 
 **Inputs:**
-- `.claude/agents/workspace/current/spec.json`
-- `.claude/agents/workspace/current/design_review.json`
-- `.claude/agents/workspace/current/qa_report.json`
-- `.claude/agents/workspace/current/live_test_report.json` (if it exists)
+- `.claude/agents/workspace/current/spec.json` (required)
+- `.claude/agents/workspace/current/live_test_report.json` (required in simplified pipeline)
+- `.claude/agents/workspace/current/design_review.json` (full pipeline only — may be absent)
+- `.claude/agents/workspace/current/qa_report.json` (full pipeline only — may be absent)
 
 **Output:** `.claude/agents/workspace/current/pm_decision.json`
 
@@ -71,13 +72,13 @@ Read the loop counter from `.claude/agents/workspace/current/.loop_count` if it 
 
 Apply these rules in order:
 
-1. If `qa_report.json` has any `critical` issue → `verdict: "rework"` (or `"fail"` if loop ≥ 3)
-2. If `design_review.json` has any `critical` issue → `verdict: "rework"` (or `"fail"` if loop ≥ 3)
-3. If `live_test_report.json` exists and `overall == "fail"` and `output_quality.cards_appeared == false` → `verdict: "rework"` (critical blocker)
-4. If `live_test_report.json` exists and `overall == "fail"` with format issues only → note as major blocker; still `"rework"` unless 3a/3b fully pass
-5. If `live_test_report.json` has `overall == "inconclusive"` → non-blocking, note in summary
-6. If `live_test_report.json` is absent → note it was skipped due to earlier critical issues
-7. If all AC pass, no critical issues in any report, loop < 3 → `verdict: "pass"`, `merge_ready: true`
+1. If `qa_report.json` exists and has any `critical` issue → `verdict: "rework"` (or `"fail"` if loop ≥ 3)
+2. If `design_review.json` exists and has any `critical` issue → `verdict: "rework"` (or `"fail"` if loop ≥ 3)
+3. If `live_test_report.json` has `overall == "rework"` → `verdict: "rework"` (or `"fail"` if loop ≥ 3); include `db_evidence` findings in `rework_instructions`
+4. If `live_test_report.json` has `overall == "fail"` → `verdict: "rework"` (critical blocker)
+5. If `live_test_report.json` has `overall == "inconclusive"` → non-blocking; note in summary; still `"pass"` if no other blockers
+6. If `live_test_report.json` is absent → `verdict: "rework"` (tester must run before PM can decide)
+7. If all blockers resolved, loop < 3 → `verdict: "pass"`, `merge_ready: true`
 8. If loop ≥ 3 and still failing → `verdict: "fail"`
 
 Write `pm_decision.json`:
