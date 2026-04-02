@@ -40,7 +40,22 @@ _ROLES_DIR    = _AGENTS_DIR / "roles"
 _WORKSPACE    = _AGENTS_DIR / "workspace" / "current"
 _ARCHIVE_DIR  = _AGENTS_DIR / "workspace" / "archive"
 _REPO_ROOT    = Path(__file__).parents[2]
-_CLAUDE_BIN   = "claude"   # must be on PATH
+def _find_claude() -> str:
+    """Locate the claude CLI binary, checking common Windows install paths."""
+    import glob as _glob
+    # Check PATH first (works in terminals where claude wrapper is present)
+    import shutil as _shutil
+    found = _shutil.which("claude")
+    if found:
+        return found
+    # Claude Code desktop app installs under AppData/Local/AnthropicClaude/app-*/
+    pattern = str(Path.home() / "AppData" / "Local" / "AnthropicClaude" / "app-*" / "claude.exe")
+    matches = sorted(_glob.glob(pattern), reverse=True)  # newest version first
+    if matches:
+        return matches[0]
+    return "claude"   # fallback — will fail with clear FileNotFoundError
+
+_CLAUDE_BIN = _find_claude()
 
 _MAX_LOOPS    = 3
 _LOOP_FILE    = _WORKSPACE / ".loop_count"
