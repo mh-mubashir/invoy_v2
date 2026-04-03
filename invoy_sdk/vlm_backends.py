@@ -21,6 +21,11 @@ def _is_qwen25_model_id(model_id: str) -> bool:
     return "qwen2.5" in m or "2.5-vl" in m
 
 
+def _is_internvl2_model_id(model_id: str) -> bool:
+    """True if ``model_id`` refers to the InternVL2 family."""
+    return "internvl" in model_id.lower()
+
+
 class VLMBackend(ABC):
     """Minimal interface used by ScreenActivityAnalyzer."""
 
@@ -190,3 +195,133 @@ class Qwen2VLBackend(VLMBackend):
         output_ids = generated_ids[:, prompt_len:]
         output_text = self._processor.batch_decode(output_ids, skip_special_tokens=True)[0]
         return (output_text.strip() or None), inference_ms
+
+
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD  = (0.229, 0.224, 0.225)
+
+
+class InternVL2Backend(VLMBackend):
+    """
+    HuggingFace InternVL2 backend (local).
+
+    Uses AutoModel + AutoTokenizer with trust_remote_code=True and a custom
+    torchvision transform (448×448, BICUBIC, bfloat16, ImageNet normalisation).
+    Inference calls model.chat() which returns a plain string directly.
+    """
+
+    def __init__(
+        self,
+        model_id: str = "OpenGVLab/InternVL2-2B",
+        device: str = "auto",
+    ):
+        self.model_id = model_id
+        self.device_pref = device
+        self._tokenizer = None
+        self._model = None
+        self._resolved_device: Optional[str] = None
+        self._torch = None  # type: ignore[assignment]
+        self._transform = None  # type: ignore[assignment]
+
+    @property
+    def log_model_name(self) -> str:
+        return f"internvl2:{self.model_id}"
+
+    def _ensure_loaded(self) -> None:
+        if self._model is not None:
+            return
+        try:
+            import torch
+            from transformers import AutoModel, AutoTokenizer
+            import torchvision.transforms as T
+            from torchvision.transforms.functional import InterpolationMode
+        except ImportError as e:
+            raise ImportError(
+                "InternVL2 backend requires: pip install transformers torch torchvision"
+            ) from e
+
+        device = self.device_pref
+        if device == "auto":
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+        self._resolved_device = device
+        self._dtype = torch.float32 if device == "cpu" else torch.bfloat16
+
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self.model_id,
+            trust_remote_code=True,
+        )
+        self._model = AutoModel.from_pretrained(
+            self.model_id,
+            torch_dtype=self._dtype,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True,
+            device_map="auto" if device != "cpu" else None,
+        )
+        if device == "cpu":
+            self._model = self._model.to(device)
+
+        self._transform = T.Compose([
+            T.Resize((448, 448), interpolation=InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        ])
+        self._torch = torch
+        logger.info("InternVL2 loaded: %s on %s", self.model_id, device)
+
+    def generate(
+        self,
+        *,
+        prompt: str,
+        image_paths: list[str],
+        max_new_tokens: int,
+        use_extractor_model: bool = False,
+    ) -> tuple[Optional[str], float]:
+        _ = use_extractor_model
+        if self._model is None:
+            try:
+                self._ensure_loaded()
+            except Exception as exc:
+                print(f"[Invoy] InternVL2 load error: {exc}")
+                return (None, 0.0)
+
+        if self._model is None:
+            return (None, 0.0)
+
+        try:
+            torch = self._torch
+            pixel_values = None
+            if image_paths:
+                path = Path(image_paths[0])
+                if path.exists():
+                    from PIL import Image as _Image
+                    img = _Image.open(str(path)).convert("RGB")
+                    pixel_values = self._transform(img).unsqueeze(0)
+                    pixel_values = pixel_values.to(self._dtype).to(self._model.device)
+
+            generation_config = {"max_new_tokens": max_new_tokens, "do_sample": False}
+
+            device_type = getattr(getattr(self._model, "device", None), "type", None)
+            if device_type == "cuda" and torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+            t0 = time.perf_counter()
+            with torch.no_grad():
+                output_text = self._model.chat(
+                    self._tokenizer,
+                    pixel_values,
+                    prompt,
+                    generation_config,
+                )
+            if device_type == "cuda" and torch.cuda.is_available():
+                torch.cuda.synchronize()
+            inference_ms = (time.perf_counter() - t0) * 1000
+
+            return (output_text.strip() or None), inference_ms
+        except Exception as exc:
+            print(f"[Invoy] InternVL2 inference error: {exc}")
+            return (None, 0.0)

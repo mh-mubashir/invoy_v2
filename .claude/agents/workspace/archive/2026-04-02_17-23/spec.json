@@ -1,0 +1,59 @@
+{
+  "request_summary": "Rewrite ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL in invoy_app/core/recorder.py to improve format compliance, action specificity, and change-note generation rate while keeping the activity prompt to ≤100 words.",
+  "files_to_change": [
+    "invoy_app/core/recorder.py"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "description": "len(ACTIVITY_PROMPT.split()) ≤ 100 when evaluated in Python. This is the measurable proxy for the ≤100-token target.",
+      "testable": true
+    },
+    {
+      "id": "AC-2",
+      "description": "ACTIVITY_PROMPT includes at least two concrete few-shot examples using realistic values (real-looking file names, URL paths, commands — no bracketed placeholders such as [App]). Each example must contain exactly two ' · ' separators (space + U+00B7 MIDDLE DOT + space).",
+      "testable": true
+    },
+    {
+      "id": "AC-3",
+      "description": "ACTIVITY_PROMPT contains ≤ 3 explicit rule lines (lines beginning with '- '). The Action rule must explicitly instruct the model to name a specific visible on-screen element — one of: function name, URL path, command, error message, heading, or PR title.",
+      "testable": true
+    },
+    {
+      "id": "AC-4",
+      "description": "CHANGE_PROMPT_TMPL retains {prev} and {curr} as its only curly-brace placeholders (any literal { or } in added text must be escaped as {{ and }}). The template must explicitly instruct the model to compare the App, File/URL, and Action fields individually.",
+      "testable": true
+    },
+    {
+      "id": "AC-5",
+      "description": "CHANGE_PROMPT_TMPL restricts the 'No significant change' reply to the case where all three fields — App, File/URL, and Action — are identical in {prev} and {curr}. The template wording must state this condition explicitly so the model does not fire the sentinel for same-app / different-file transitions.",
+      "testable": true
+    },
+    {
+      "id": "AC-6",
+      "description": "No lines in recorder.py outside the ACTIVITY_PROMPT and CHANGE_PROMPT_TMPL string literals are modified. Specifically: max_new_tokens values (150 and 80), the .format(prev=prev, curr=activity_text) call, all imports, all InvoyRecorder methods, and _resize_for_inference() must be byte-identical to the pre-change file.",
+      "testable": true
+    }
+  ],
+  "design_constraints": [
+    "No UI components are changed — this task is purely a prompt-text edit in recorder.py.",
+    "The ' · ' separator (U+00B7 MIDDLE DOT, one space either side) must appear verbatim in ACTIVITY_PROMPT examples; activity_feed.py parses on this exact three-character string.",
+    "Prompts must be tuned for a 2B-parameter model: format-first, minimal rules (≤3), examples before rules. No explanatory prose, nested bullets, or token-heavy preambles.",
+    "CHANGE_PROMPT_TMPL must remain a single-call .format() template — do not split it into multiple strings or change the placeholder names {prev} and {curr}."
+  ],
+  "out_of_scope": [
+    "max_new_tokens values (150 for activity inference, 80 for change inference).",
+    "Any inference logic inside _on_capture(), _load_model_then_capture(), or any other InvoyRecorder method.",
+    "Any file other than invoy_app/core/recorder.py.",
+    "invoy_sdk/ primitives.",
+    "The three-field App · File/URL · Action structure and the U+00B7 separator character.",
+    "SQLiteActivityLog schema or any database-related code."
+  ],
+  "risk_flags": [
+    "CHANGE_PROMPT_TMPL is consumed by Python's str.format() at recorder.py line 292. Any literal { or } character added to the template body (e.g., in a field-list or example) must be escaped as {{ and }} — an unescaped brace will raise KeyError at runtime during change inference.",
+    "activity_feed.py splits on ' · ' (space + U+00B7 + space). Few-shot examples in ACTIVITY_PROMPT must use this exact separator so the model sees the canonical output pattern — using a plain hyphen or en-dash in examples will cause the model to mirror the wrong separator.",
+    "Qwen2-VL 2B over-generalises from few-shot examples: if examples contain overly similar apps or actions, the model will copy them verbatim. Use examples from three different app categories (editor, browser, terminal) with clearly distinct action fields.",
+    "The ACTIVITY_PROMPT string is built with implicit concatenation inside parentheses — verify the final constant has no accidental missing newlines at fragment boundaries that would merge format instructions into a single run-on line for the model."
+  ],
+  "status": "done"
+}

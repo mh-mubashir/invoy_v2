@@ -1,0 +1,25 @@
+{
+  "verdict": "approved_with_notes",
+  "issues": [
+    {
+      "id": "D-1",
+      "severity": "minor",
+      "file": "invoy_app/components/activity_feed.py",
+      "line_reference": "line 259 — font parameter on dot CTkLabel",
+      "violation": "Raw font tuple ('Segoe UI', 9) used instead of a FONTS token. CLAUDE.md forbids raw font tuples in component files.",
+      "fix": "Replace font=(\"Segoe UI\", 9) with FONTS[\"timestamp\"] (the dot glyph is small and the timestamp font is the closest semantic match for a tiny inline marker). If no existing token is the right size, raise it with the PM to add a FONTS[\"dot\"] token — do NOT hard-code a new tuple."
+    }
+  ],
+  "positive_notes": [
+    "The wraplength=900 change specified in AC-6 is a pure layout property and is not a colour, font, or SPACING token — using the integer literal 900 directly is acceptable and consistent with the CLAUDE.md note in spec.json risk_flags.",
+    "All colour usage in activity_feed.py correctly references COLORS tokens: COLORS['bg'], COLORS['surface'], COLORS['elevated'], COLORS['border'], COLORS['text'], COLORS['subtext'], COLORS['muted'], and the ctx_* palette keys — no hardcoded hex strings found.",
+    "All spacing values use SPACING tokens (SPACING['lg'], SPACING['md'], SPACING['sm'], SPACING['xs'], SPACING['xxl']) and CARD_PAD_X, CARD_PAD_Y, CARD_GAP design constants — no arbitrary pixel values in padding or margin.",
+    "Corner radius on ActivityCard uses RADIUS (10) correctly for a primary card surface.",
+    "Text hierarchy is correctly applied: COLORS['text'] for activity body, COLORS['subtext'] for the change note, COLORS['muted'] for timestamp and context chip label.",
+    "Fonts on all labels other than the dot use FONTS tokens: FONTS['heading'], FONTS['ui'], FONTS['body'], FONTS['timestamp'].",
+    "The change label correctly preserves the dot character and '↳  ' prefix as required by the design constraints.",
+    "No new imports, widgets, or tokens are introduced in activity_feed.py — scope is confined to wraplength only as specified.",
+    "recorder.py and vlm_backends.py contain no UI elements — the prompt text and dtype changes in those files have no design surface to review and are clean from a design perspective."
+  ],
+  "summary": "The planned changes are design-safe. The only wraplength values touched are the two CTkLabel instances at lines 286 and 298, and using the literal 900 for wraplength is explicitly permitted because wraplength is a layout geometry property, not a colour, font, or SPACING token. One pre-existing minor violation was found in the file: the dot glyph label at line 259 uses a raw font tuple ('Segoe UI', 9) rather than a FONTS token. This violation pre-dates this task and the spec does not ask the programmer to change it, but it must not be left to accumulate — it should be addressed in a follow-up. The verdict is approved_with_notes: the programmer may proceed with the wraplength change and the other two file edits; the raw font tuple should be tracked as a design debt item for a subsequent clean-up task."
+}

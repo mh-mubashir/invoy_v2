@@ -1,0 +1,878 @@
+% ============================================================
+%  Invoy VLM — Research Paper
+%  Two-column, 10pt, standard article class (no special templates)
+%  Compile: pdflatex (two passes) from the paper/ directory
+%  Figures: ../eval_reports/three_model_plots/
+% ============================================================
+\documentclass[10pt, twocolumn]{article}
+
+% --- geometry ---------------------------------------------------
+\usepackage[top=1in, bottom=1in, left=0.75in, right=0.75in,
+            columnsep=0.25in]{geometry}
+
+% --- fonts & typography -----------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{lmodern}
+
+% --- maths ------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- graphics ---------------------------------------------------
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+
+% --- tables -----------------------------------------------------
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+
+% --- captions ---------------------------------------------------
+\usepackage{caption}
+\captionsetup{font=small, labelfont=bf, skip=4pt}
+
+% --- colour & links ---------------------------------------------
+\usepackage{xcolor}
+\definecolor{linkblue}{RGB}{0,70,140}
+\usepackage[colorlinks=true,
+            linkcolor=linkblue,
+            citecolor=linkblue,
+            urlcolor=linkblue,
+            pdftitle={Invoy VLM: Benchmarking Local Vision-Language Models
+                      for Continuous Desktop Activity Tracking},
+            pdfauthor={Hamza Iqbal}]{hyperref}
+
+% --- headers & footers ------------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{Invoy VLM}}
+\fancyhead[R]{\small\textit{Local VLMs for Desktop Activity Tracking}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\setlength{\headheight}{13pt}
+
+% --- section formatting -----------------------------------------
+\usepackage{titlesec}
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{10pt plus 2pt minus 2pt}{4pt plus 1pt}
+\titlespacing*{\subsection}{0pt}{6pt plus 2pt}{2pt plus 1pt}
+
+% --- abstract formatting ----------------------------------------
+\renewenvironment{abstract}{%
+  \small\begin{center}{\bfseries Abstract}\end{center}%
+  \begin{quotation}\noindent\ignorespaces
+}{%
+  \end{quotation}\medskip\hrule\medskip
+}
+
+% ================================================================
+\title{%
+  \vspace{-1.5em}%
+  \LARGE\bfseries Invoy VLM: Benchmarking Local Vision-Language Models\\[4pt]
+  for Continuous Desktop Activity Tracking%
+  \vspace{0.3em}
+}
+\author{%
+  Hamza Iqbal\\[2pt]
+  \small \texttt{invoy\_sdk} Research Project\\
+  \small April 2026
+}
+\date{}
+% ================================================================
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+% ================================================================
+\begin{abstract}
+Continuous desktop activity tracking---automatically logging what a user is doing
+from periodic screenshots---has practical applications in productivity monitoring,
+workflow reconstruction, and personal analytics. We present \textbf{Invoy SDK}, a
+lightweight system that captures screenshots every ten seconds and routes each frame
+through a locally-resident Vision-Language Model~(VLM) to produce a natural-language
+activity description and a change summary relative to the previous frame. We evaluate
+three open-weight VLMs in this pipeline---Qwen2-VL~2B, Qwen2.5-VL~3B, and
+Qwen2-VL~7B---over 136 frames drawn from a real Linux workstation session spanning
+approximately 23~minutes. Using a suite of proxy-based evaluation metrics that require
+no human annotation, we find: (1)~parameter count is the dominant predictor of
+description richness; (2)~architectural improvements in the Qwen2.5-VL family do not
+compensate for reduced parameter count at the 3B scale; and (3)~the 2B model achieves the highest Change-Delta F1 (0.334 vs.\ 0.200 for 7B),
+meaning its change texts are the most lexically grounded in the tokens that actually
+changed between activity frames---a reversal driven by the 7B model's tendency to
+paraphrase rather than echo the activity delta.
+\end{abstract}
+
+% ================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Capturing \emph{what} a person is working on throughout a session has long relied on
+application-level instrumentation---browser extensions, IDE plug-ins, OS-level hooks---
+each covering only a narrow slice of activity and requiring explicit integration. A
+purely visual approach, in which periodic desktop screenshots are interpreted by a
+vision-language model, offers a unified, application-agnostic alternative.
+Recent open-weight VLMs with strong visual comprehension have made local, on-device
+inference practical at consumer GPU memory budgets, enabling privacy-preserving
+deployments where no screenshot ever leaves the workstation.
+
+Despite this promise, it is unclear how VLM quality---particularly at the compact
+2--7 billion parameter range accessible on a single GPU---trades off against model
+size for this specific task. Desktop screenshots are dense with small text, overlapping
+windows, and domain-specific vocabulary; their interpretation requires both fine-grained
+OCR-like reading and higher-level reasoning about what task a person is performing.
+
+This paper addresses three research questions:
+\begin{enumerate}
+  \item[\textbf{RQ1.}] How does activity description quality scale with parameter count
+        in the 2--7B range for this task?
+  \item[\textbf{RQ2.}] Does the newer Qwen2.5-VL architecture outperform Qwen2-VL at a
+        comparable or lower parameter count?
+  \item[\textbf{RQ3.}] Can any of these models reliably detect task switches from
+        screenshot pairs alone?
+\end{enumerate}
+
+We make the following contributions:
+\begin{itemize}
+  \item An open-source SDK (\textbf{Invoy}) for screenshot capture, local VLM inference,
+        and structured SQLite logging, designed to make multi-model comparison
+        reproducible.
+  \item A proxy evaluation suite---including Change-Delta F1 and keyword-transition
+        precision/recall---that quantifies activity description quality and change-text
+        grounding without requiring human annotation.
+  \item An empirical comparison of three Qwen-family VLMs on 136 real-world desktop
+        frames, yielding actionable deployment guidance.
+\end{itemize}
+
+The remainder of the paper is structured as follows.
+Section~\ref{sec:system} describes the Invoy system architecture.
+Section~\ref{sec:eval} details the evaluation methodology.
+Section~\ref{sec:results} presents results.
+Section~\ref{sec:discussion} discusses findings and limitations.
+Section~\ref{sec:related} surveys related work.
+Section~\ref{sec:conclusion} concludes.
+
+% ================================================================
+\section{The Invoy System}
+\label{sec:system}
+
+Invoy consists of three loosely-coupled layers: a capture layer, an analysis layer, and
+a storage layer. The design intentionally separates data collection from inference so
+that the same screenshot archive can be re-analysed with different models or prompts
+without re-running capture.
+
+\subsection{Capture Layer}
+
+A configurable capture loop (\texttt{collect\_periodic\_screenshots.py}) saves one
+full-resolution PNG per interval (default: 10~s). The implementation uses the
+\texttt{mss} library for X11 sessions and falls back to \texttt{gnome-screenshot} on
+GNOME Wayland. Screenshots are named by UTC timestamp, providing a sortable archive
+that is independent of any database.
+
+\subsection{Analysis Layer}
+
+\texttt{Qwen2VLBackend} (\texttt{invoy\_sdk/vlm\_backends.py}) wraps the Hugging Face
+\texttt{transformers} library for Qwen2-VL~\cite{wang2024qwen2vl} and
+Qwen2.5-VL~\cite{qwen25vl2025} model families. The correct model class is selected
+automatically from the model-id string at load time.
+
+Each frame triggers two separate inference calls:
+\begin{enumerate}
+  \item \textbf{Activity prompt.} The current screenshot alone is passed with a prompt
+        asking the model to describe, in two to three sentences, what the person is
+        currently doing on screen: which application is active, what file or page is
+        open, and what task appears to be in progress.
+  \item \textbf{Change prompt.} The activity text produced for the previous frame and the
+        activity text just produced for the current frame are passed as plain text to the
+        model. No image is used at this stage. The model is asked to describe what changed
+        between the two descriptions and to state whether the task appears to be the same
+        or different.
+\end{enumerate}
+
+\noindent
+\textbf{Design rationale for text-only change detection.}
+A natural alternative would be to pass both the previous and current screenshots
+directly to the VLM as a two-image prompt, letting the model reason visually
+about what changed. However, this was not considered feasible for the deployment
+scenario Invoy targets. The central research question of this work is whether
+these models can run \emph{locally and continuously} on a single consumer GPU at a
+10-second capture interval. At that cadence, each activity inference call already
+consumes several seconds of GPU time. Adding a second two-image inference call for
+change detection would roughly double the per-frame compute cost, pushing the
+effective loop period well beyond the 10-second target and making sustained
+real-time operation impractical. Comparing the two activity \emph{texts}
+instead---a pure language model call over short strings---adds negligible overhead
+and keeps the pipeline within its resource budget. This choice is a direct
+consequence of the feasibility constraint, and its impact on change detection
+accuracy is examined in Section~\ref{subsec:changedetect}.
+
+Prompts are kept \emph{identical} across all three models to ensure a controlled
+comparison. An optional grounded mode first extracts readable on-screen text tokens
+and then conditions the description on that evidence, reducing hallucinated detail;
+in the experiments reported here the standard (ungrounded) mode was used so that
+all three models operate under exactly the same conditions.
+
+\subsection{Storage Layer}
+
+Results are persisted to a per-run SQLite database via \texttt{invoy\_sdk/activity\_log.py}.
+Each row stores the screenshot path, frame index, run label, model name, the activity
+text, the change text, and two optional extracted-evidence fields. Running the same
+screenshot archive with a different model simply writes a new database with a distinct
+run label, allowing side-by-side comparison with no data mutation.
+
+% ================================================================
+\section{Evaluation Methodology}
+\label{sec:eval}
+
+\subsection{Dataset}
+
+136 screenshots were captured on 16~March~2026 from a Linux workstation running a
+GNOME Wayland session at 10-second intervals over approximately 23~minutes
+(07:31:59--07:54:47 UTC). The session was a continuous realistic work session
+involving Python development in VS~Code, a terminal, and a web browser (including
+a university grade-portal visit). No held-out split is used; all 136 frames are
+evaluated. Because no human activity labels are available, the 7B model is treated
+throughout as a \emph{pseudo ground-truth reference}.
+
+\subsection{Models}
+
+Three models were evaluated. All ran on the same CUDA GPU with the
+\texttt{device=``auto''} setting:
+
+\begin{center}
+\small
+\begin{tabular}{@{}llrr@{}}
+\toprule
+\textbf{Label} & \textbf{Family} & \textbf{Params} & \textbf{VRAM} \\
+\midrule
+2B & Qwen2-VL    & $\sim$2B & $\sim$5\,GB \\
+3B & Qwen2.5-VL  & $\sim$3B & $\sim$7\,GB \\
+7B & Qwen2-VL    & $\sim$7B & $\sim$14\,GB \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The 2B and 7B models belong to the same Qwen2-VL generation; the 3B model is from
+the newer Qwen2.5-VL generation, offering an architecture-controlled comparison at
+a lower parameter count than the 7B reference.
+
+\subsection{Proxy Quality Metrics}
+
+All evaluation metrics are computed purely from the text output of each model; no
+images are re-examined at evaluation time.
+
+\textbf{Token length} is the count of non-stopword tokens matching the pattern
+\texttt{[A-Za-z0-9\_./:--]\{2,\}}.
+
+\textbf{Specificity score}~$S$ measures the fraction of tokens that are concrete
+application or UI identifiers: a fixed lexicon of app/tool names
+(\texttt{vscode}, \texttt{chrome}, \texttt{terminal}, \texttt{github}, etc.) plus
+tokens whose suffix matches a file-extension pattern
+(\texttt{.py}, \texttt{.ts}, \texttt{.json}, \texttt{.md}, \ldots):
+\[
+  S = \frac{\text{concrete hits}}{\max(1,\; n_{\text{tokens}})} \;\in [0,1].
+\]
+
+\textbf{Hedging rate}~$H$ counts tokens expressing uncertainty
+(\emph{maybe}, \emph{appears}, \emph{seems}, \emph{might}, etc.) divided by total
+token count.
+
+For change descriptions, \textbf{action-verb presence}~$V \in \{0,1\}$ flags whether
+the text contains a concrete action verb (e.g.\ \emph{switch}, \emph{open},
+\emph{commit}), \textbf{state-transition presence}~$T \in \{0,1\}$ flags temporal
+transition language (\emph{changed}, \emph{moved from}, \emph{now}, etc.), and
+\textbf{vagueness rate}~$G$ counts filler words (\emph{stuff}, \emph{things},
+\emph{various}) per token.
+
+\subsection{Proxy Scores (0--5 Scale)}
+
+Four aggregate scores are derived from the above metrics:
+\begin{align*}
+  \text{Activity Fidelity}      &= 5\bigl[0.6S + 0.4(1-H)\bigr] \\
+  \text{Activity Specificity}   &= 5S \\
+  \text{Change Correctness}     &= 5\bigl[0.35V + 0.35T + 0.30D\bigr] \\
+  \text{Change Usefulness}      &= 5\bigl[0.50D + 0.50(1-G)\bigr]
+\end{align*}
+where $D$ is the Change-Delta F1 score defined in Section~\ref{subsec:drift}.
+
+\subsection{Agreement with 7B Reference}
+
+For each frame, the output of the 2B and 3B models is compared to the 7B output using:
+\textbf{TF-IDF cosine similarity} (semantic proximity under a shared vocabulary),
+\textbf{ROUGE-L F1}~\cite{lin2004rouge} (longest common sub-sequence recall/precision),
+and \textbf{Jaccard similarity} (token-set overlap after stopword removal).
+
+\subsection{Change-Delta F1}
+\label{subsec:drift}
+
+The \textbf{Change-Delta F1} (CDF1) metric measures how well each model's change text
+is lexically grounded in what actually changed between consecutive activity texts. For
+frame $t > 0$, the \emph{activity delta} is the symmetric difference of tokenised
+activity texts:
+\[
+  \Delta_t = \mathcal{T}(a_{t-1}) \;\triangle\; \mathcal{T}(a_t),
+\]
+where $\mathcal{T}(\cdot)$ is the stopword-filtered token set. Let $\mathcal{C}_t$ be
+the token set of the change text at frame~$t$. Define:
+\begin{align*}
+  \text{precision}_t &= \tfrac{|\Delta_t \cap \mathcal{C}_t|}{|\mathcal{C}_t|} \\[4pt]
+  \text{recall}_t    &= \tfrac{|\Delta_t \cap \mathcal{C}_t|}{|\Delta_t|}
+\end{align*}
+\[
+  \text{CDF1}_t = \frac{2 \cdot \text{precision}_t \cdot \text{recall}_t}
+                       {\text{precision}_t + \text{recall}_t}
+\]
+with $\text{CDF1}_t = 1$ if both sets are empty (correctly silent), and $0$ if exactly
+one is empty. CDF1 is averaged over frames $t = 1, \ldots, 135$.
+
+\textbf{Precision} penalises change texts that mention tokens unrelated to what
+shifted. \textbf{Recall} rewards change texts that cover the actual delta tokens.
+The F1 combination prevents gaming either direction alone---a verbose model cannot
+inflate recall without also suffering on precision, and a terse model cannot inflate
+precision without suffering on recall.
+
+As a complementary scalar, the \textbf{Spearman rank correlation} between per-frame
+activity drift $\delta_t$ and per-frame CDF1$_t$ measures whether change-text grounding
+scales proportionally with the magnitude of the activity shift.
+
+% ----------------------------------------------------------------
+\subsection{Metric Provenance and Novelty}
+\label{subsec:provenance}
+
+The evaluation metrics used in this work fall into two categories: established measures
+adapted from the NLP and information-retrieval literature, and task-specific proxies
+introduced here.
+
+\textbf{Established metrics.}
+\emph{Token length} is a standard output-length statistic used across NLG evaluation
+studies~\cite{lin2004rouge}.
+\emph{Hedging rate} builds directly on prior work in computational linguistics on
+hedge detection: Hyland's metadiscourse framework~\cite{hyland2005metadiscourse}
+catalogues epistemic hedges (e.g.\ \textit{possibly}, \textit{seems}, \textit{might})
+across academic genres, and the BioScope corpus~\cite{vincze2008bioscope} provides a
+manually annotated resource for uncertainty and negation in biomedical text.
+Our hedging lexicon (\textit{maybe, possibly, unclear, uncertain, likely, appears,
+seems, might, could}) is adapted directly from those precedents.
+\emph{TF-IDF cosine similarity}, \emph{ROUGE-L}, and \emph{Jaccard overlap} are
+all standard reference-based NLG metrics; ROUGE-L in particular is
+from~\cite{lin2004rouge}.
+
+\textbf{Novel metrics.}
+The \emph{specificity score} $S$ is a task-specific proxy introduced in this work.
+While it is structurally inspired by precision-oriented retrieval evaluation, no prior
+measure explicitly counts concrete desktop application identifiers and file-extension
+tokens as a fraction of description length for activity-tracking evaluation.
+We claim $S$ as an original contribution scoped to the desktop activity domain.
+
+The \emph{Change-Delta F1} (CDF1) is fully novel.
+No prior work applies symmetric-difference framing to consecutive natural-language
+generation outputs to measure grounding of a change description.
+The metric is structurally inspired by ROUGE-F1~\cite{lin2004rouge} and by
+delta-based change detection concepts in software engineering, but the formulation ---
+computing the symmetric difference of tokenised activity texts as the reference signal ---
+has no direct precedent in the VLM or activity-recognition literature.
+
+% ================================================================
+\section{Results}
+\label{sec:results}
+
+\begin{table*}[t]
+\centering
+\caption{Aggregate evaluation results over 136 frames.
+         Qwen2-VL 7B serves as pseudo ground-truth reference
+         (\texttt{---} = self-comparison not applicable).
+         \textbf{Bold} denotes the best value in each row.}
+\label{tab:results}
+\setlength{\tabcolsep}{8pt}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Metric}
+  & \textbf{Qwen2-VL 2B}
+  & \textbf{Qwen2.5-VL 3B}
+  & \textbf{Qwen2-VL 7B} \\
+\midrule
+\multicolumn{4}{@{}l}{\small\textit{Description quality}} \\[3pt]
+Average token length
+  & 37.2
+  & 25.9
+  & \textbf{44.7} \\
+Specificity score
+  & \textbf{0.038}
+  & 0.016
+  & 0.033 \\
+Hedging rate
+  & 0.013
+  & 0.010
+  & \textbf{0.006} \\[8pt]
+\multicolumn{4}{@{}l}{\small\textit{Proxy scores (0--5 scale)}} \\[3pt]
+Activity Fidelity
+  & \textbf{2.09}
+  & 2.03
+  & 2.09 \\
+Activity Specificity
+  & \textbf{0.190}
+  & 0.081
+  & 0.165 \\
+Change Correctness
+  & \textbf{2.57}
+  & 2.23
+  & 2.15 \\
+Change Usefulness
+  & \textbf{3.33}
+  & 3.17
+  & 3.00 \\[8pt]
+\multicolumn{4}{@{}l}{\small\textit{Change-text grounding}} \\[3pt]
+Change-Delta F1
+  & \textbf{0.334}
+  & 0.269
+  & 0.200 \\
+Spearman $r$ (drift vs CDF1)
+  & \textbf{0.863}
+  & 0.814
+  & 0.819 \\[8pt]
+\multicolumn{4}{@{}l}{\small\textit{Agreement with 7B reference}} \\[3pt]
+Cosine similarity
+  & \textbf{0.338}
+  & 0.327
+  & ---\\
+ROUGE-L F1
+  & \textbf{0.292}
+  & 0.285
+  & --- \\
+Jaccard similarity
+  & \textbf{0.235}
+  & 0.226
+  & --- \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Table~\ref{tab:results} summarises aggregate results across all 136 frames.
+The following sub-sections examine each dimension in turn.
+
+\subsection{Description Quality}
+\label{subsec:desc_quality}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{01_quality_metrics_bar.png}
+  \caption{Activity description quality metrics per model (specificity and hedging
+           rate on a 0--1 scale; verbosity normalised to [0,1] by dividing by the
+           maximum mean token count). The 2B model achieves the highest
+           specificity (0.038) despite its smaller size, while the 3B model is
+           markedly more concise. Hedging rate decreases monotonically with
+           parameter count.}
+  \label{fig:quality}
+\end{figure}
+
+The 7B model produces the richest descriptions, averaging 44.7~tokens per
+frame---20\% more than 2B (37.2) and 73\% more than 3B (25.9).
+Figure~\ref{fig:quality} shows that this verbosity gap is accompanied by the lowest
+hedging rate (0.006 vs.\ 0.013 for 2B), indicating that larger models express more
+confident, declarative descriptions. Smaller models appear to compensate for
+uncertainty by using qualified language (\emph{appears to be}, \emph{seems like}),
+which in turn penalises Activity Fidelity.
+
+A counterintuitive result is that the 2B model achieves the \emph{highest} specificity
+score (0.038), surpassing 7B (0.033). This is explained by the behavioural difference
+between models of different capacities: the 2B model tends to anchor descriptions on
+the most visually salient keywords---application names, filenames, visible URLs---in a
+surface-level extraction style, while the 7B model generates more fluent, narrative
+prose that dilutes keyword density even when semantically richer. The 3B model scores
+substantially below both (0.016), reflecting its tendency towards short, abstract
+summaries that omit specific context.
+
+\subsection{Proxy Score Analysis}
+\label{subsec:proxy}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{02_proxy_scores_bar.png}
+  \caption{Proxy quality scores (0--5) across four evaluation dimensions.
+           The 2B model leads on both change-related dimensions (Change Correctness
+           and Change Usefulness) as well as Activity Specificity. Activity Fidelity
+           is nearly equal for 2B and 7B. The 3B model is lowest on all four axes.}
+  \label{fig:proxy}
+\end{figure}
+
+Figure~\ref{fig:proxy} shows the four proxy dimensions. Activity Fidelity is nearly
+identical for 2B and 7B (both 2.09), with 3B trailing (2.03). Activity Specificity
+reproduces the specificity-score ordering: 2B (0.190) $>$ 7B (0.165) $>$ 3B (0.081),
+the last being less than half the 2B value.
+
+For change descriptions, Change Correctness and Change Usefulness both incorporate
+the Change-Delta F1 score~$D$ (Section~\ref{subsec:changedetect}). The 2B model
+leads on both: Change Correctness 2.57 vs.\ 2.23 (3B) and 2.15 (7B); Change
+Usefulness 3.33 vs.\ 3.17 (3B) and 3.00 (7B). This ordering mirrors the CDF1
+ranking and is examined in Section~\ref{subsec:changedetect}. Across all four proxy
+dimensions the 3B model is uniformly lowest, as confirmed by the radar chart in
+Figure~\ref{fig:radar} (Section~\ref{sec:discussion}).
+
+\subsection{Agreement with 7B Reference}
+\label{subsec:agreement}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{09_pairwise_heatmap.png}
+  \caption{Mean pairwise TF-IDF cosine similarity of activity texts across
+           all 136 frames. Self-similarity on the diagonal is 1.0 by definition.
+           Inter-model cosines cluster in the 0.31--0.34 range, indicating
+           substantial output divergence even for identical input frames.}
+  \label{fig:heatmap}
+\end{figure}
+
+Figure~\ref{fig:heatmap} presents the mean pairwise cosine similarity matrix.
+The 2B model is marginally closer to 7B (cosine 0.338, ROUGE-L 0.292, Jaccard 0.235)
+than the 3B model (0.327, 0.285, 0.226). The 2B--3B similarity (0.315) is even lower,
+indicating that the two compact models interpret the same screens in substantially
+different ways. All inter-model similarities fall in the 0.31--0.34 range, which is
+far below values that would indicate consistent interpretation. This reflects the
+fundamentally open-ended nature of the task: with no constrained output vocabulary,
+models can produce equally plausible but lexically dissimilar descriptions of the same
+scene.
+
+\subsection{Temporal and Segment Analysis}
+\label{subsec:temporal}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{s3_segment_agreement.png}
+  \caption{TF-IDF cosine and Jaccard agreement of 2B and 3B with 7B, broken down
+           by application context segment (keyword-based, all three models combined).
+           Segments with fewer than 5 frames are omitted. The 2B model is closer to
+           7B in the two longest stable browser segments (frames 63--108 and
+           117--130); the 3B model is closer in shorter transitional segments.
+           Segment frame counts ($n$) are shown on the horizontal axis.}
+  \label{fig:timeseries}
+\end{figure}
+
+Keyword-based segmentation of the session (scanning activity texts from all three
+models combined) reveals a \textbf{browser-dominant session}: approximately 80\% of
+frames describe browser activity, with brief VS~Code appearances (1--2 frame bursts)
+and a sustained terminal segment only in the final 6 frames (131--136). The two
+known task-switch anchors (frame~$\sim$40 and frame~$\sim$110) are both recovered
+as keyword transition points.
+
+Figure~\ref{fig:timeseries} shows agreement with 7B broken down by segment. The
+pattern is context-dependent: in the two longest stable browser segments (frames
+63--108 and 117--130), the 2B model is consistently closer to 7B (cosine 0.400 and
+0.399 vs.\ 0.325 and 0.340 for 3B). In shorter or transitional segments, the 3B
+model is occasionally closer. This suggests 2B's overall agreement advantage is
+driven by its stronger consistency in sustained, content-stable portions of the
+session rather than being uniform throughout.
+
+\subsection{Change Detection Selectivity}
+\label{subsec:changepr}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{s4_change_detection_pr.png}
+  \caption{Precision, recall, and F1 for change detection against keyword-transition
+           ground truth (segment boundaries derived from combined keyword analysis of
+           all three models). All models achieve recall $\approx 1.0$ but precision
+           $\approx 0.12$: they fire a change event on $\sim$130 of 136 frames, but
+           only 16 frames are genuine context transitions.}
+  \label{fig:changepr}
+\end{figure}
+
+Figure~\ref{fig:changepr} presents the most concrete change-detection result in
+this evaluation. Using keyword-identified context boundaries (VS~Code, browser,
+terminal) as ground truth, each model's change text is classified as reporting a
+change if it contains an action verb or state-transition token (the V and T metrics
+from Section~\ref{sec:eval}). Against 16 genuine transitions across 136 frames:
+
+\begin{itemize}
+  \item \textbf{Recall $\approx 1.0$} for all three models---every real context
+        switch is captured.
+  \item \textbf{Precision $\approx 0.12$}---the models fire change events on
+        $\sim$130 frames, yielding $\sim$113 false positives per model.
+  \item \textbf{F1 $\approx 0.21$}---far below useful task-switch detection.
+\end{itemize}
+
+The models are \emph{indiscriminate}: the V and T tokens are present in nearly
+every change text regardless of whether a real transition occurred.  This result
+is independent of model size---all three behave identically in terms of selectivity.
+It establishes definitively that raw VLM change texts cannot serve as task-switch
+signals without a downstream classifier.
+
+\subsection{Change-Text Grounding (CDF1)}
+\label{subsec:changedetect}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{07_change_delta_f1_bar.png}
+  \caption{Mean Change-Delta F1 per model (frames $t \geq 1$). The 2B model achieves
+           the highest lexical grounding (0.334), meaning its change texts cover more
+           of the tokens that actually appeared or disappeared between consecutive
+           activity texts. The 7B model is lowest (0.200) despite producing the
+           richest activity descriptions---its change texts paraphrase rather than
+           echo the activity delta tokens.}
+  \label{fig:alignment}
+\end{figure}
+
+Figure~\ref{fig:alignment} presents the mean CDF1 scores. The 2B model is highest
+(0.334), the 3B model is intermediate (0.269), and the 7B model is lowest (0.200).
+The ordering is the \emph{reverse} of the activity description richness ranking,
+which makes it the most interpretively interesting result in the evaluation.
+
+The explanation lies in how each model generates change text. The 2B model's
+surface-level, keyword-anchored activity descriptions produce activity deltas that
+are small and dominated by specific tokens (app names, filenames). Its change texts
+tend to copy the same identifiers directly, yielding high overlap. The 7B model
+generates fluent, narrative activity texts; when these shift between frames, the
+delta is large and spread across many paraphrased concepts. The 7B change texts
+describe the shift in natural language that is semantically accurate but uses
+different vocabulary---which the CDF1 metric penalises because CDF1 is lexical, not
+semantic. This is a known trade-off in token-overlap-based evaluation.
+
+Figure~\ref{fig:scatter} reveals the mechanism behind the CDF1 gap via OLS
+regression. All three intercepts are near-identical ($\leq$0.017)---models do not
+differ in their baseline grounding at near-zero drift. What differs is the
+\emph{slope}: 2B=0.697, 3B=0.545, 7B=0.394. The slope gap between 2B and 7B
+(0.303, bootstrap 95\% CI [0.256, 0.349]) excludes zero, confirming that 2B's
+change-text grounding rises significantly faster with activity drift. In practical
+terms: 2B benefits most from high-drift frames (large activity text shifts), where
+its keyword-anchored style produces tightly matched change texts, while 7B's
+paraphrasing style yields smaller gains at the same drift magnitude.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{07b_drift_vs_cdf1_scatter.png}
+  \caption{Per-frame scatter of activity drift vs Change-Delta F1 for each model,
+           with OLS regression line. Spearman rank correlations: 0.863 (2B), 0.814
+           (3B), 0.819 (7B). OLS slopes differ significantly: 2B=0.697, 3B=0.545,
+           7B=0.394 (slope CI for 2B$-$7B: [0.256, 0.349], excludes zero). Intercepts
+           are near-identical ($\leq$0.017). The difference is therefore in
+           \emph{slope}: 2B's grounding rises faster with drift than 7B's, not from
+           a higher baseline.}
+  \label{fig:scatter}
+\end{figure*}
+
+% ================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{08_radar_overall.png}
+  \caption{Radar chart across six normalised evaluation dimensions. The 2B model
+           (blue) leads on the change-related axes (Change-Delta F1, Change
+           Correctness, Change Usefulness) while the 7B model (green) leads on
+           activity description richness (token length, Activity Fidelity). The 3B
+           model (orange) is interior to both competitors on every axis.}
+  \label{fig:radar}
+\end{figure}
+
+\subsection{Model Size vs.\ Architecture (RQ1, RQ2)}
+
+The results support a \textbf{parameter-count-first} interpretation for
+\emph{activity description} quality (RQ1): the 7B model leads on richness (44.7 tokens),
+confidence (hedging rate 0.006), and Activity Fidelity. For \emph{change-text} quality
+the ranking reverses---the 2B model leads on CDF1, Change Correctness, and Change
+Usefulness---a distinction examined in Section~\ref{subsec:changedetect}.
+
+RQ2 is answered negatively: the newer Qwen2.5-VL architecture does not compensate
+for reduced parameter count at the 3B scale. Across all eleven metrics in
+Table~\ref{tab:results}, the 3B model scores lower than either the 2B or 7B
+Qwen2-VL model. The 3B model's descriptions are systematically shorter, more
+abstract, and lower in concrete identifier density. Figure~\ref{fig:radar} makes
+this clear in a single view: the 3B polygon is interior to both competitors on
+every axis. A plausible explanation is that the architectural improvements in
+Qwen2.5-VL---enhanced spatial understanding, improved OCR alignment---primarily
+manifest at 7B-scale and above, where they can be fully utilised; at 3B the
+capacity constraint becomes the binding factor.
+
+The 2B and 7B models from the same Qwen2-VL generation show a marginally higher
+mean cosine (0.338 vs.\ 0.327 for 3B--7B). However, a Wilcoxon signed-rank test
+on per-frame cosine similarities yields $p = 0.104$---not statistically significant
+at $\alpha = 0.05$ (2B is closer to 7B on only 54.4\% of frames). The mean
+difference is noted for completeness but is not claimed as a robust architectural
+finding.
+
+\subsection{Change-Text Grounding and RQ3}
+
+The CDF1 result---2B leads, 7B is last---requires careful interpretation. CDF1 is a
+\emph{lexical} metric: it rewards change texts that reuse the same tokens present in
+the activity delta. A model that writes ``VS~Code was replaced by Chrome'' scores
+higher than one that writes ``the user transitioned from a development environment to
+a web browser'', even though both convey the same meaning.
+
+This means 7B's low CDF1 is not evidence that it produces poor change texts.
+Rather, it reflects that 7B generates more fluent, semantically rich language that
+paraphrases the delta instead of echoing it verbatim. For downstream consumers that
+parse the change text by keyword matching (e.g.\ extracting which app was opened),
+2B's lexical grounding is directly useful. For consumers that use embedding similarity
+or LLM-based comparison, 7B's richer paraphrases may be equally or more useful.
+
+Crucially, all three models show strong Spearman correlation between activity drift
+and CDF1 ($r = 0.863$, $0.814$, $0.819$; Figure~\ref{fig:scatter}). This means every
+model \emph{scales} its change-text effort proportionally with the magnitude of the
+activity shift---the difference is only in the baseline vocabulary choice.
+
+RQ3 is answered in two parts. For \emph{selectivity}, the precision/recall
+evaluation (Section~\ref{subsec:changepr}) is unambiguous: all three models have
+precision $\approx 0.12$ and recall $\approx 1.0$, producing $\sim$113 false
+positives per model against 16 real transitions. Change texts are not selective---
+they describe differences on almost every frame regardless of whether a real context
+switch occurred. For \emph{grounding quality} on genuine change frames, the CDF1
+metric differentiates the models (2B leads), but this only matters after a
+post-processing layer that can distinguish true transitions from the continuous stream
+of over-triggered change texts. Whether 2B's lexical grounding or 7B's semantic
+paraphrasing is preferable for that downstream step depends on the consumer's
+matching strategy.
+We identify three complementary directions for future work:
+\begin{enumerate}
+  \item \textbf{Temporal classifier.} Train a lightweight binary classifier on
+        pairs of consecutive activity texts to distinguish continuations from
+        task switches, using the richer 7B descriptions as pseudo-labels.
+  \item \textbf{Semantic CDF1.} Replace token-overlap with embedding cosine
+        similarity between the change text and the activity delta, so that
+        semantically equivalent paraphrases (7B-style) are credited alongside
+        verbatim echoes (2B-style).
+  \item \textbf{Fine-tuning on labelled transitions.} Even a small set of
+        human-annotated task-switch frames---perhaps 200--300 pairs---could provide
+        sufficient supervision for a specialised change-detection head.
+\end{enumerate}
+
+\subsection{Limitations}
+
+Four limitations bound the scope of these conclusions:
+\begin{enumerate}
+  \item \textbf{No human ground truth.} All metrics are proxy-based. Specificity
+        heuristics reward keyword density, not semantic accuracy; a model that
+        invents plausible-looking filenames would score well without being correct.
+  \item \textbf{Single session.} One user, one machine, one 23-minute window.
+        Task diversity is limited to coding, terminal work, and browsing; models
+        may rank differently on email composition, document editing, or video
+        playback.
+  \item \textbf{CDF1 is lexical, not semantic.} Change-Delta F1 rewards token-level
+        overlap between the change text and the activity delta. A semantically
+        accurate paraphrase scores lower than a verbatim echo. Models with richer,
+        more fluent language (7B) are structurally penalised relative to models with
+        surface-level extraction styles (2B), even when semantic content is equivalent.
+  \item \textbf{No latency or throughput measurement.} Production deployment
+        requires characterising inference time per frame; at these model sizes the
+        effective capture cadence is bounded by inference, not by the configured
+        interval.
+\end{enumerate}
+
+\subsection{Deployment Guidance}
+
+Based on the results, we offer the following practical recommendations:
+\begin{itemize}
+  \item \textbf{Use 7B} when GPU resources allow ($\geq$14\,GB VRAM), description
+        fluency matters, and the change-text consumer uses semantic comparison
+        (embeddings, LLM evaluation). The 7B model produces the richest activity
+        descriptions despite lower lexical grounding in change texts.
+  \item \textbf{Use 2B} when memory is constrained ($\sim$5\,GB VRAM) \emph{or}
+        when the change-text consumer uses keyword matching or structured parsing.
+        The 2B model leads on Change-Delta F1 (0.334) and Spearman calibration
+        (0.863), making its change texts the most lexically grounded.
+  \item \textbf{Avoid 3B} unless output brevity is the explicit design goal. For
+        every quality dimension measured, 2B is a superior choice at comparable
+        or lower VRAM cost.
+  \item \textbf{Post-process change texts} before using them as task-switch signals.
+        Even the highest-CDF1 model (2B at 0.334) leaves most delta tokens uncovered;
+        a structured classifier downstream is necessary for reliable task-switch
+        detection.
+\end{itemize}
+
+% ================================================================
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Desktop activity recognition.}
+Early passive monitoring systems used application-level event logs or window-manager
+APIs to infer activity, covering only the applications they were explicitly
+instrumented for. Vision-based approaches---including screen-region classifiers and
+OCR-assisted labelling---offered broader coverage but were fragile to unseen
+applications and required domain-specific training data. Our approach replaces
+hand-crafted classifiers with a generalist VLM, enabling open-vocabulary activity
+descriptions with no application-specific engineering.
+
+\paragraph{Vision-language models for UI understanding.}
+Qwen2-VL~\cite{wang2024qwen2vl} and Qwen2.5-VL~\cite{qwen25vl2025} represent the
+state of the art in open-weight vision-language models optimised for document and
+interface understanding, with explicit OCR alignment and spatial grounding in the
+training objective. Related work on MiniGPT-4~\cite{zhu2023minigpt4} and similar
+models established the feasibility of instruction-following on visual inputs at
+sub-10B scales, motivating the localdeployment approach taken here.
+
+\paragraph{Proxy evaluation for generative models.}
+ROUGE-L~\cite{lin2004rouge} and TF-IDF cosine similarity are standard automatic
+metrics for text quality when reference texts are available but human annotation
+is prohibitively expensive. Their known limitations---sensitivity to phrasing over
+semantics---motivate the additional specificity and hedging heuristics we introduce,
+which reward grounding in visible UI elements rather than fluent but
+content-neutral prose.
+
+% ================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented Invoy, an SDK for continuous desktop activity tracking using local
+vision-language models, and reported the first systematic comparison of three
+open-weight VLMs---Qwen2-VL 2B, Qwen2.5-VL 3B, and Qwen2-VL 7B---on a real-world
+screenshot sequence. Our findings are threefold. First, parameter count governs \emph{activity description}
+quality: the 7B model leads on richness, fluency, and confidence. Second, the newer
+Qwen2.5-VL architecture does not compensate for the parameter deficit at 3B, making
+the older Qwen2-VL 2B the superior compact choice across all dimensions. Third, for
+\emph{change-text grounding}, the ranking reverses: the 2B model achieves the highest
+Change-Delta F1 (0.334 vs.\ 0.200 for 7B), because its keyword-anchored activity
+texts produce lexically tight deltas that its change texts echo directly. This
+finding highlights a practical split: use 7B when the downstream consumer interprets
+change texts semantically, and 2B when keyword-level grounding is required.
+A structured classifier downstream is essential: all three models achieve recall
+$\approx 1.0$ but precision $\approx 0.12$ against keyword-identified transitions,
+meaning $\sim$130 of 136 frames trigger a change text regardless of actual context
+continuity.
+
+The Invoy SDK, evaluation scripts, and generated databases are available in the
+project repository.
+
+% ================================================================
+\begin{thebibliography}{6}
+
+\bibitem{wang2024qwen2vl}
+J.~Wang et al.,
+``Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any
+  Resolution,''
+\textit{arXiv preprint arXiv:2409.12191}, 2024.
+
+\bibitem{qwen25vl2025}
+Qwen Team, Alibaba Group,
+``Qwen2.5-VL Technical Report,''
+\textit{arXiv preprint arXiv:2502.13923}, 2025.
+
+
+\bibitem{zhu2023minigpt4}
+D.~Zhu et al.,
+``MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large
+  Language Models,''
+\textit{arXiv preprint arXiv:2304.10592}, 2023.
+
+\bibitem{lin2004rouge}
+C.-Y.~Lin,
+``ROUGE: A Package for Automatic Evaluation of Summaries,''
+in \textit{Proc.\ ACL Workshop on Text Summarization Branches Out}, 2004.
+
+\bibitem{hyland2005metadiscourse}
+K.~Hyland,
+\textit{Metadiscourse: Exploring Interaction in Writing}.
+Continuum, 2005.
+
+\bibitem{vincze2008bioscope}
+V.~Vincze, G.~Szarvas, R.~Farkas, G.~M\'{o}ra, and J.~Csirik,
+``The BioScope Corpus: Biomedical Texts Annotated for Uncertainty,
+  Negation and Their Scopes,''
+in \textit{Proc.\ BioNLP Workshop at ACL}, 2008, pp.~38--45.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/agents/orchestrator.py --phase qa-only --if-spec-present --trigger post-tool-use"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python .claude/agents/orchestrator.py*)",
+      "Bash(python .claude/agents/app_launcher.py*)",
+      "Bash(claude --print*)"
+    ]
+  }
+}

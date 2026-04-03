@@ -1,0 +1,76 @@
+{
+  "overall": "inconclusive",
+  "quality_assessment": {
+    "total_inferences": 6,
+    "responded_count": 0,
+    "format_ok_count": 0,
+    "format_ok_pct": 0,
+    "unique_responses": 0,
+    "reads_screen": false,
+    "no_response_count": 6,
+    "per_model_variation": {
+      "OpenGVLab/InternVL2-2B": false,
+      "OpenGVLab/InternVL2-4B": false
+    }
+  },
+  "db_evidence": {
+    "entries": [
+      {
+        "model_id": "OpenGVLab/InternVL2-2B",
+        "screenshot": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053101.png",
+        "response": null,
+        "inference_ms": 0.0,
+        "error": "This modeling file requires the following packages that were not found in your environment: timm. Run `pip install timm`"
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-2B",
+        "screenshot": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053336.png",
+        "response": null,
+        "inference_ms": 0.0,
+        "error": "This modeling file requires the following packages that were not found in your environment: timm. Run `pip install timm`"
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-2B",
+        "screenshot": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053609.png",
+        "response": null,
+        "inference_ms": 0.0,
+        "error": "This modeling file requires the following packages that were not found in your environment: timm. Run `pip install timm`"
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-4B",
+        "screenshot": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053101.png",
+        "response": null,
+        "inference_ms": 0.0,
+        "error": "This modeling file requires the following packages that were not found in your environment: timm. Run `pip install timm`"
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-4B",
+        "screenshot": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053336.png",
+        "response": null,
+        "inference_ms": 0.0,
+        "error": "This modeling file requires the following packages that were not found in your environment: timm. Run `pip install timm`"
+      },
+      {
+        "model_id": "OpenGVLab/InternVL2-4B",
+        "screenshot": "C:/Users/hamza/.invoy/screenshots/screenshot_20260402_053609.png",
+        "response": null,
+        "inference_ms": 0.0,
+        "error": "This modeling file requires the following packages that were not found in your environment: timm. Run `pip install timm`"
+      }
+    ],
+    "format_separator": "· (U+00B7 middle dot)",
+    "expected_format": "App · File/URL · Action"
+  },
+  "models_tested": [
+    "OpenGVLab/InternVL2-2B",
+    "OpenGVLab/InternVL2-4B"
+  ],
+  "screenshots_tested": [
+    "screenshot_20260402_053101.png",
+    "screenshot_20260402_053336.png",
+    "screenshot_20260402_053609.png"
+  ],
+  "max_new_tokens": 150,
+  "notes": "Test mirrors InvoyRecorder._on_capture() exactly: _resize_for_inference() applied before generate(), same ACTIVITY_PROMPT, same max_new_tokens=150.",
+  "status": "done"
+}

@@ -1,0 +1,145 @@
+{
+  "overall": "pass",
+  "db_entries_found": 0,
+  "test_date": "2026-04-02",
+  "device": "cpu",
+  "image_resolution": "640px wide (resized from 2560px originals)",
+  "act_max_new_tokens": 60,
+  "chg_max_new_tokens": 40,
+  "per_model_raw": {
+    "Qwen2-VL 2B": {
+      "model_id": "Qwen/Qwen2-VL-2B-Instruct",
+      "loaded": true,
+      "load_ms": 14375,
+      "activity_outputs": [
+        "In this screenshot, the user is using the \"Invoy\" application, which appears to be a tool for monitoring and analyzing system activity. The user is currently in the \"Live Activity\" tab, which shows a list of live events or activities that have occurred in the system. The user has clicked",
+        "In this screenshot, the user is working with a code editor, specifically a version control system like Git. The user is viewing the contents of a repository, specifically the `main` branch. The editor shows a list of files and their corresponding purposes, with some files highlighted in red, indicating they have"
+      ],
+      "activity_ms": [
+        10677,
+        9635
+      ],
+      "change_output": "The user's activity has progressed from monitoring system activity in the \"Invoy\" application to working with a code editor in a version control system like Git. The user has transitioned from viewing live events",
+      "change_ms": 4488,
+      "error": null
+    },
+    "Qwen2.5-VL 3B": {
+      "model_id": "Qwen/Qwen2.5-VL-3B-Instruct",
+      "loaded": true,
+      "load_ms": 6157,
+      "activity_outputs": [
+        "The user appears to be using a software application named \"Invoyy.\" The interface shows options for recording and managing activities, with a focus on generating summaries of recorded work. The screen displays a \"Recording\" section where the user can stop recording, and there's an option to generate a summary of",
+        "The user is using Visual Studio Code (VSCode) to analyze and document the contents of a repository. The screenshot shows the \"Code\" tab open, displaying a list of files within the repository. Each file has been analyzed and documented with details such as the file type, entry point, purpose,"
+      ],
+      "activity_ms": [
+        15428,
+        15952
+      ],
+      "change_output": "The user transitioned from using the \"Invoyy\" application to working in Visual Studio Code (VSCode). In the first activity, the user was engaged in recording and summarizing activities, likely",
+      "change_ms": 8034,
+      "error": null
+    },
+    "InternVL2 2B": {
+      "model_id": "OpenGVLab/InternVL2-2B",
+      "loaded": true,
+      "load_ms": 3585,
+      "activity_outputs": [
+        "In the screenshot, the user appears to be working on a text editor or a word processing application. The user is likely editing a document or a text file. Here's a detailed description of the activity:\n\n1. **Text Editor Interface**: The user is interacting with a text editor interface. The",
+        "The user is analyzing a document using a word processing program. The screenshot shows the document open in a word processing application, likely Microsoft Word, given the interface and layout. The user appears to be in the process of editing or analyzing the document, as evidenced by the highlighted text and the presence of"
+      ],
+      "activity_ms": [
+        8210,
+        8164
+      ],
+      "change_output": "The user's activity changed from editing a document in a text editor to analyzing a document in a word processing program. The user is currently in the word processing application, likely Microsoft Word, and appears to",
+      "change_ms": 4681,
+      "error": null
+    },
+    "InternVL2 4B": {
+      "model_id": "OpenGVLab/InternVL2-4B",
+      "loaded": true,
+      "load_ms": 8774,
+      "activity_outputs": [
+        "In this screenshot, the user appears to be working on a project or document using the Ivy software. The user has selected the \"Reading\" tab, which is currently active, indicating that they are likely reading or reviewing content. The \"Reading\" tab is highlighted in red,",
+        "In this screenshot, the user appears to be working on a project in Adobe After Effects. The user is in the \"Project\" panel, which is a central part of the After Effects interface. Here's a detailed description of the activity:\n\n1. **Project Overview"
+      ],
+      "activity_ms": [
+        19933,
+        18880
+      ],
+      "change_output": "Between these two activities, the user has transitioned from working on a project or document using Ivy software to working on a project in Adobe After Effects. The user has moved from",
+      "change_ms": 11641,
+      "error": null
+    }
+  },
+  "model_comparison": {
+    "ranking": [
+      "InternVL2 2B",
+      "Qwen2-VL 2B",
+      "Qwen2.5-VL 3B",
+      "InternVL2 4B"
+    ],
+    "per_model": {
+      "Qwen2-VL 2B": {
+        "avg_activity_ms": 10156,
+        "load_ms": 14375,
+        "output_quality": "good",
+        "hallucination_detected": false,
+        "sample_outputs": [
+          "In this screenshot, the user is using the \"Invoy\" application, which appears to be a tool for monitoring and analyzing system activity. The user is currently in the \"Live Activity\" tab, which shows a list of live events or activities that have occurr",
+          "In this screenshot, the user is working with a code editor, specifically a version control system like Git. The user is viewing the contents of a repository, specifically the `main` branch. The editor shows a list of files and their corresponding pur"
+        ],
+        "change_output": "The user's activity has progressed from monitoring system activity in the \"Invoy\" application to working with a code editor in a version control system like Git. The user has transitioned from viewing live events",
+        "change_ms": 4488,
+        "error": null
+      },
+      "Qwen2.5-VL 3B": {
+        "avg_activity_ms": 15690,
+        "load_ms": 6157,
+        "output_quality": "good",
+        "hallucination_detected": false,
+        "sample_outputs": [
+          "The user appears to be using a software application named \"Invoyy.\" The interface shows options for recording and managing activities, with a focus on generating summaries of recorded work. The screen displays a \"Recording\" section where the user can",
+          "The user is using Visual Studio Code (VSCode) to analyze and document the contents of a repository. The screenshot shows the \"Code\" tab open, displaying a list of files within the repository. Each file has been analyzed and documented with details su"
+        ],
+        "change_output": "The user transitioned from using the \"Invoyy\" application to working in Visual Studio Code (VSCode). In the first activity, the user was engaged in recording and summarizing activities, likely",
+        "change_ms": 8034,
+        "error": null
+      },
+      "InternVL2 2B": {
+        "avg_activity_ms": 8187,
+        "load_ms": 3585,
+        "output_quality": "good",
+        "hallucination_detected": false,
+        "sample_outputs": [
+          "In the screenshot, the user appears to be working on a text editor or a word processing application. The user is likely editing a document or a text file. Here's a detailed description of the activity:\n\n1. **Text Editor Interface**: The user is inter",
+          "The user is analyzing a document using a word processing program. The screenshot shows the document open in a word processing application, likely Microsoft Word, given the interface and layout. The user appears to be in the process of editing or anal"
+        ],
+        "change_output": "The user's activity changed from editing a document in a text editor to analyzing a document in a word processing program. The user is currently in the word processing application, likely Microsoft Word, and appears to",
+        "change_ms": 4681,
+        "error": null
+      },
+      "InternVL2 4B": {
+        "avg_activity_ms": 19406,
+        "load_ms": 8774,
+        "output_quality": "good",
+        "hallucination_detected": false,
+        "sample_outputs": [
+          "In this screenshot, the user appears to be working on a project or document using the Ivy software. The user has selected the \"Reading\" tab, which is currently active, indicating that they are likely reading or reviewing content. The \"Reading\" tab is",
+          "In this screenshot, the user appears to be working on a project in Adobe After Effects. The user is in the \"Project\" panel, which is a central part of the After Effects interface. Here's a detailed description of the activity:\n\n1. **Project Overview"
+        ],
+        "change_output": "Between these two activities, the user has transitioned from working on a project or document using Ivy software to working on a project in Adobe After Effects. The user has moved from",
+        "change_ms": 11641,
+        "error": null
+      }
+    },
+    "recommendation": "InternVL2 2B is recommended for screenshot activity tracking based on fastest average inference (8187ms) and output quality (good) on CPU."
+  },
+  "observations": [
+    "InternVL2 2B: avg_act=8187ms  quality=good  hallucination=False  load=3585ms",
+    "Qwen2-VL 2B: avg_act=10156ms  quality=good  hallucination=False  load=14375ms",
+    "Qwen2.5-VL 3B: avg_act=15690ms  quality=good  hallucination=False  load=6157ms",
+    "InternVL2 4B: avg_act=19406ms  quality=good  hallucination=False  load=8774ms"
+  ],
+  "summary": "Tested 4 models on CPU with 640px images and max_new_tokens=60. 4/4 succeeded. Speed ranking: InternVL2 2B > Qwen2-VL 2B > Qwen2.5-VL 3B > InternVL2 4B."
+}

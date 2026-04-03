@@ -1,0 +1,20 @@
+# Invoy App — additional dependencies beyond the core invoy_sdk
+# Install with: pip install -r invoy_app/requirements.txt
+
+# UI framework — Apple-inspired modern widgets, dark mode, rounded corners
+customtkinter>=5.2.2
+
+# Claude API client for work-log summarisation
+anthropic>=0.25.0
+
+# Windows toast notifications (fork of win10toast with no auto-dismiss bug)
+# On non-Windows platforms this package simply won't be importable, and
+# WindowsNotifier degrades silently.
+win10toast-persist>=0.1.0
+
+# Image processing — used for logo rendering and screenshot manipulation
+Pillow>=10.0.0
+
+# UI automation — used by .claude/agents/app_launcher.py for the Testing Agent
+# Enables keyboard shortcuts and mouse clicks to drive the app during live tests
+pyautogui>=0.9.54
