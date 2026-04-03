@@ -249,6 +249,7 @@ class InternVL2Backend(VLMBackend):
             else:
                 device = "cpu"
         self._resolved_device = device
+        self._dtype = torch.float32 if device == "cpu" else torch.bfloat16
 
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.model_id,
@@ -256,7 +257,7 @@ class InternVL2Backend(VLMBackend):
         )
         self._model = AutoModel.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=self._dtype,
             low_cpu_mem_usage=True,
             trust_remote_code=True,
             device_map="auto" if device != "cpu" else None,
@@ -300,7 +301,7 @@ class InternVL2Backend(VLMBackend):
                     from PIL import Image as _Image
                     img = _Image.open(str(path)).convert("RGB")
                     pixel_values = self._transform(img).unsqueeze(0)
-                    pixel_values = pixel_values.to(torch.bfloat16).to(self._model.device)
+                    pixel_values = pixel_values.to(self._dtype).to(self._model.device)
 
             generation_config = {"max_new_tokens": max_new_tokens, "do_sample": False}
 

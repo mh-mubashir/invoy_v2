@@ -39,7 +39,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._recording_active = recording_active
 
         self.title("Invoy — Settings")
-        self.geometry("500x780")
+        self.geometry("500x860")
         self.resizable(False, False)
         self.configure(fg_color=COLORS["surface"])
         self.grab_set()   # make modal
@@ -204,6 +204,38 @@ class SettingsWindow(ctk.CTkToplevel):
                 text_color=COLORS["muted"],
             ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
 
+        # ---- Inference resolution ----------------------------------
+        self._section("Inference Resolution")
+
+        _WIDTH_LABELS = ["320px", "640px", "1280px", "Full"]
+        _WIDTH_VALUES = [320, 640, 1280, 0]
+        current_width = self._config.inference_width
+        current_width_label = _WIDTH_LABELS[
+            _WIDTH_VALUES.index(current_width)
+            if current_width in _WIDTH_VALUES else 1
+        ]
+        self._width_var = tk.StringVar(value=current_width_label)
+
+        ctk.CTkSegmentedButton(
+            self,
+            values=_WIDTH_LABELS,
+            variable=self._width_var,
+            fg_color=COLORS["elevated"],
+            selected_color=COLORS["accent"],
+            selected_hover_color=COLORS["accent_hover"],
+            unselected_color=COLORS["elevated"],
+            unselected_hover_color=COLORS["border"],
+            text_color=COLORS["text"],
+            font=FONTS["body"],
+            corner_radius=RADIUS,
+        ).pack(anchor="w", padx=pad, pady=(0, 2))
+        ctk.CTkLabel(
+            self,
+            text="Lower = faster inference. Full = no resize (slowest, most detail).",
+            font=FONTS["small"],
+            text_color=COLORS["muted"],
+        ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
+
         # ---- Notifications -----------------------------------------
         self._section("Windows Notifications")
         self._notif_var = tk.BooleanVar(value=self._config.notifications_enabled)
@@ -288,6 +320,14 @@ class SettingsWindow(ctk.CTkToplevel):
         chosen_model_label = self._model_var.get()
         model_id = AVAILABLE_MODELS.get(chosen_model_label, self._config.model_id)
 
+        _WIDTH_LABELS = ["320px", "640px", "1280px", "Full"]
+        _WIDTH_VALUES = [320, 640, 1280, 0]
+        chosen_width_label = self._width_var.get()
+        inference_width = _WIDTH_VALUES[
+            _WIDTH_LABELS.index(chosen_width_label)
+            if chosen_width_label in _WIDTH_LABELS else 1
+        ]
+
         new_cfg = AppConfig(
             claude_api_key=self._key_var.get().strip(),
             db_path=self._db_var.get().strip(),
@@ -295,6 +335,7 @@ class SettingsWindow(ctk.CTkToplevel):
             interval_seconds=max(5.0, interval),
             model_id=model_id,
             device=device,
+            inference_width=inference_width,
             appearance_mode=self._appearance_var.get().lower(),
             notifications_enabled=self._notif_var.get(),
         )

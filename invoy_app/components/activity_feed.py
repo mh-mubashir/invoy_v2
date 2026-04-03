@@ -283,7 +283,7 @@ class ActivityCard(ctk.CTkFrame):
             text=activity_text,
             font=FONTS["body"],
             text_color=COLORS["text"],
-            wraplength=820,
+            wraplength=900,
             justify="left",
             anchor="w",
         ).pack(fill="x", pady=(SPACING["sm"], 0))
@@ -295,7 +295,7 @@ class ActivityCard(ctk.CTkFrame):
                 text=f"↳  {change_text}",
                 font=FONTS["ui"],
                 text_color=COLORS["subtext"],
-                wraplength=820,
+                wraplength=900,
                 justify="left",
                 anchor="w",
             ).pack(fill="x", pady=(SPACING["xs"], 0))

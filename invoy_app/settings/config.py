@@ -52,6 +52,10 @@ class AppConfig:
     # customtkinter appearance mode: "dark" | "light" | "System"
     appearance_mode: str = "dark"
 
+    # Max width (px) to resize screenshots to before inference; height scaled proportionally.
+    # Lower = faster inference and fewer vision tokens; higher = more detail for the model.
+    inference_width: int = 640
+
     # Whether to show Windows toast notifications
     notifications_enabled: bool = True
 

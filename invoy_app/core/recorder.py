@@ -45,52 +45,34 @@ from invoy_app.settings.config import AppConfig
 # vision tokens and makes inference take 20–30 s on a mid-range GPU.
 # Resizing to MAX_INFERENCE_WIDTH keeps vision tokens under ~500 and cuts
 # inference to 3–8 s without meaningfully harming text legibility.
-MAX_INFERENCE_WIDTH = 1280   # pixels; height scaled proportionally
-
-
-def _resize_for_inference(src_path: str) -> str:
+def _resize_for_inference(src_path: str, max_width: int = 640) -> str:
     """
     Return a path to a resized copy of the screenshot if it is wider than
-    MAX_INFERENCE_WIDTH, otherwise return the original path unchanged.
+    max_width, otherwise return the original path unchanged.
 
+    Pass max_width=0 to skip resizing entirely (full resolution).
     The resized file is written next to the original with a '_thumb' suffix.
     """
     img = Image.open(src_path)
     w, h = img.size
-    if w <= MAX_INFERENCE_WIDTH:
+    if max_width == 0 or w <= max_width:
         return src_path
-    new_h = int(h * MAX_INFERENCE_WIDTH / w)
-    img_small = img.resize((MAX_INFERENCE_WIDTH, new_h), Image.LANCZOS)
+    new_h = int(h * max_width / w)
+    img_small = img.resize((max_width, new_h), Image.LANCZOS)
     thumb_path = str(src_path).replace(".png", "_thumb.png")
     img_small.save(thumb_path)
-    print(f"[Invoy] Resized {w}×{h} → {MAX_INFERENCE_WIDTH}×{new_h} for inference")
+    print(f"[Invoy] Resized {w}x{h} -> {max_width}x{new_h} for inference")
     return thumb_path
 
 
 # ── Prompts ────────────────────────────────────────────────────────────────
 
-ACTIVITY_PROMPT = (
-    "Reply with one line — no extra text:\n"
-    "App · File/URL · Action\n"
-    "\n"
-    "VS Code · auth.py · editing validate_token function\n"
-    "Chrome · https://github.com/user/repo/pull/42 · reviewing PR \"Add rate limiting\"\n"
-    "Terminal · ~/projects/invoy · running pytest tests/test_recorder.py\n"
-    "\n"
-    "- App: foreground application name\n"
-    "- File/URL: full URL, file name, or current directory\n"
-    "- Action: name a specific visible element — function name, URL path, command, "
-    "error message, heading, or PR title"
-)
+ACTIVITY_PROMPT = "What is the user doing in this screenshot? Describe the activity you see."
 
 CHANGE_PROMPT_TMPL = (
-    "Previous: {prev}\n"
-    "Current: {curr}\n\n"
-    "Each entry has three fields: App, File/URL, and Action.\n"
-    "Compare App, File/URL, and Action individually between the two entries.\n"
-    "Write one concise sentence describing what changed or progressed.\n"
-    "Reply 'No significant change' ONLY when App, File/URL, and Action are all three "
-    "identical between Previous and Current — if any single field differs, describe the change."
+    "Previous activity: {prev}\n"
+    "Current activity: {curr}\n\n"
+    "What changed or progressed between these two activities?"
 )
 
 
@@ -274,7 +256,7 @@ class InvoyRecorder:
         print(f"[Invoy] Frame captured: {path}")
 
         # Resize screenshot so vision token count stays manageable
-        infer_path = _resize_for_inference(path)
+        infer_path = _resize_for_inference(path, max_width=self._config.inference_width)
 
         # ── Activity inference ─────────────────────────────────────────
         try:
@@ -282,7 +264,7 @@ class InvoyRecorder:
             activity_text, act_ms = self._backend.generate(
                 prompt=ACTIVITY_PROMPT,
                 image_paths=[infer_path],
-                max_new_tokens=150,
+                max_new_tokens=200,
             )
             activity_text = activity_text or "(no description)"
             print(f"[Invoy] Activity ({act_ms:.0f} ms): {activity_text[:80]}")
